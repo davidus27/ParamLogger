@@ -1,0 +1,14 @@
+{
+  "name": "@param-inventory/backend",
+  "version": "0.1.0",
+  "description": "Backend plugin for Parameter Inventory",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@param-inventory/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@caido/sdk-backend": "^0.1.0",
+    "typescript": "^5.0.0"
+  }
+}

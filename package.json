@@ -1,0 +1,20 @@
+{
+  "name": "caido-param-inventory",
+  "version": "0.1.0",
+  "description": "Caido Parameter Inventory Plugin",
+  "private": true,
+  "scripts": {
+    "build": "caido-dev build",
+    "watch": "caido-dev watch",
+    "dev": "caido-dev watch"
+  },
+  "devDependencies": {
+    "@caido-community/dev": "^0.1.0"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

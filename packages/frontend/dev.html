@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parameter Inventory - Development</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+        }
+        #app {
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    <script type="module">
+        import { init } from './dist/index.js';
+        
+        // Mount the app to the body for development
+        document.addEventListener('DOMContentLoaded', () => {
+            init(); // Uses mock SDK
+        });
+    </script>
+</body>
+</html>
