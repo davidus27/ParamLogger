@@ -3,12 +3,16 @@
  */
 
 import type { SDK, RequestEvent } from "./caido-sdk-mock.js";
-import type { RpcMethods, BackendEvents, PluginConfig, InventoryFilters } from "../../shared/dist/types.js";
+import type { PluginConfig, InventoryFilters, BackendEvents } from "@param-inventory/shared";
+import { DEFAULT_CONFIG, DEFAULT_REDACTION_PATTERNS, SENSITIVE_VALUE_PATTERNS, REDACTION_MODE, REDACTED_TEXT } from "@param-inventory/shared";
+
+type RpcMethods = Record<string, (...args: any[]) => Promise<any>>;
 import { ParameterStore } from "./store.js";
-import { parseRequest } from "./parser.js";
+import { RequestParser } from "./parser.js";
 import { classifyParameter } from "./classifier.js";
 import { assignFlags } from "./flagger.js";
-import { DEFAULT_CONFIG, DEFAULT_REDACTION_PATTERNS, SENSITIVE_VALUE_PATTERNS, REDACTION_MODE, REDACTED_TEXT } from "../../shared/dist/constants.js";
+
+const parser = new RequestParser();
 
 // Global plugin state
 let store: ParameterStore;
@@ -103,7 +107,7 @@ async function processRequest(request: any): Promise<void> {
     }
     
     // Parse the request to extract parameters
-    const parsedRequest = await parseRequest(request, config);
+    const parsedRequest = parser.parseRequest(request);
     
     // Process each parameter through the full pipeline
     for (const parsedParam of parsedRequest.parameters) {

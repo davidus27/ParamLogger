@@ -9,13 +9,14 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@caido/primevue": "^0.3.3",
     "@param-inventory/shared": "workspace:*",
-    "@caido/primevue": "^4.0.0",
+    "primeicons": "^7.0.0",
     "primevue": "^4.0.0",
     "vue": "^3.4.0"
   },
   "devDependencies": {
-    "@caido/sdk-frontend": "^0.1.0",
+    "@caido/sdk-frontend": "^0.56.2",
     "@vitejs/plugin-vue": "^5.0.0",
     "autoprefixer": "^10.4.0",
     "postcss": "^8.4.0",
