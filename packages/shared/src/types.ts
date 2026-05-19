@@ -1,44 +1,39 @@
 // Domain data model
 export interface Domain {
-  id: string;
-  hostname: string;
-  scheme: string;
-  port: number;
-  firstSeen: Date;
+  name: string;
+  endpoints: Endpoint[];
+  totalParams: number;
   lastSeen: Date;
-  requestCount: number;
 }
 
 // Endpoint data model
 export interface Endpoint {
-  id: string;
-  domainId: string;
   method: string;
+  path: string;
   normalizedPath: string;
-  rawPathExamples: string[];
+  parameters: Parameter[];
+  requestCount: number;
   firstSeen: Date;
   lastSeen: Date;
-  requestCount: number;
 }
 
 // Parameter data model
 export interface Parameter {
   id: string;
-  domainId: string;
-  endpointId: string;
+  domain: string;
   method: string;
+  path: string;
+  normalizedPath: string;
   location: ParameterLocation;
   name: string;
-  normalizedName: string;
   valueTypes: ValueType[];
-  interestingFlags: Flag[];
   dynamicConfidence: number;
+  flags: Flag[];
+  count: number;
   firstSeen: Date;
   lastSeen: Date;
-  requestCount: number;
-  uniqueValueCount: number;
-  exampleRequestIds: string[];
   redactedExamples: string[];
+  exampleRequestIds: string[];
 }
 
 // Observation data model (individual parameter instance)
@@ -46,10 +41,11 @@ export interface Observation {
   id: string;
   parameterId: string;
   requestId: string;
-  rawName: string;
-  rawValueRedacted: string;
+  value: string;
+  redactedValue: string;
   valueType: ValueType;
-  observedAt: Date;
+  timestamp: Date;
+  contextPath?: string;
 }
 
 // Parameter location enum
@@ -94,20 +90,22 @@ export enum Flag {
   DYNAMIC = 'dynamic',
 }
 
+// Alias for backwards compatibility
+export const ParameterFlag = Flag;
+
 // Frontend data transfer objects
 export interface ParameterInventoryData {
-  domains: Domain[];
-  endpoints: Endpoint[];
   parameters: Parameter[];
+  domains: Domain[];
   stats: InventoryStats;
 }
 
 export interface InventoryStats {
   totalRequests: number;
-  totalParameters: number;
-  totalDomains: number;
-  totalEndpoints: number;
-  newParameters: number;
+  totalParams: number;
+  uniqueParams: number;
+  domains: number;
+  endpoints: number;
 }
 
 // Filter options for frontend
@@ -125,10 +123,21 @@ export interface FilterOptions {
   };
 }
 
+// Inventory filters for backend queries
+export interface InventoryFilters {
+  domains?: string[];
+  methods?: string[];
+  locations?: ParameterLocation[];
+  flags?: Flag[];
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
 // Parameter detail for drawer
 export interface ParameterDetail extends Parameter {
-  domain: Domain;
-  endpoint: Endpoint;
+  domainInfo: Domain;
+  endpointInfo: Endpoint;
   exampleRequests: Array<{
     id: string;
     method: string;
@@ -138,31 +147,43 @@ export interface ParameterDetail extends Parameter {
 }
 
 // Events sent from backend to frontend
-export interface BackendEvents {
-  'inventory-updated': (data: { 
-    newParameters: Parameter[]; 
-    updatedParameters: Parameter[];
-    stats: InventoryStats;
-  }) => void;
-  'scan-progress': (data: { 
+export type InventoryBackendEvents = {
+  'inventory-updated': (parameter: Parameter) => void;
+  'observation-added': (observation: Observation) => void;
+  'scan-progress': (progress: { 
     processed: number; 
     total: number; 
-    currentDomain?: string;
+    isComplete: boolean;
   }) => void;
-  'scan-complete': (data: { 
-    totalProcessed: number; 
+  'stats-updated': (stats: InventoryStats) => void;
+  'scan-started': (data: { total: number }) => void;
+  'scan-completed': (data: { 
+    processed: number; 
     duration: number;
   }) => void;
-}
+  // Index signature to satisfy Caido BackendEvents constraint
+  [key: string]: (...args: any[]) => void;
+};
+
+// Alias for backwards compatibility
+export type BackendEvents = InventoryBackendEvents;
 
 // RPC endpoints exposed by backend
-export interface BackendAPI {
-  getInventory: (filters?: Partial<FilterOptions>) => Promise<ParameterInventoryData>;
-  getParameterDetail: (parameterId: string) => Promise<ParameterDetail | null>;
+export type InventoryBackendAPI = {
+  getInventory: (filters?: InventoryFilters) => Promise<Parameter[]>;
+  getDomains: () => Promise<Domain[]>;
+  getParameterDetail: (parameterId: string) => Promise<Parameter | null>;
+  getParameterObservations: (parameterId: string, limit?: number) => Promise<Observation[]>;
   getStats: () => Promise<InventoryStats>;
-  exportWordlist: (filters?: Partial<FilterOptions>) => Promise<string[]>;
-  clearNewFlags: () => Promise<void>;
-}
+  exportWordlist: (filters?: InventoryFilters) => Promise<string[]>;
+  clearInventory: () => Promise<void>;
+  triggerHistoricalScan: () => Promise<void>;
+  // Index signature to satisfy Caido BackendEndpoints constraint
+  [key: string]: (...args: any[]) => any;
+};
+
+// Alias for backwards compatibility
+export type BackendAPI = InventoryBackendAPI;
 
 // Request parsing result
 export interface ParsedParameter {
@@ -171,6 +192,24 @@ export interface ParsedParameter {
   value: string;
   valueType: ValueType;
   isRedacted: boolean;
+  contextPath?: string; // Optional context path for nested parameters
+}
+
+// Complete parsed request structure
+export interface ParsedRequest {
+  domain: string;
+  method: string;
+  path: string;
+  normalizedPath: string;
+  requestId: string;
+  timestamp: Date;
+  parameters: ParsedParameter[];
+}
+
+// Classification result for parameter value analysis
+export interface ClassificationResult {
+  valueType: ValueType;
+  dynamicConfidence: number;
 }
 
 // Plugin configuration

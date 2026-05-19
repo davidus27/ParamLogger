@@ -1,87 +1,93 @@
 <template>
   <div class="param-table-container">
-    <table>
-      <thead>
-        <tr>
-          <th style="width:30px"></th>
-          <th>Parameter</th>
-          <th>Location</th>
-          <th>Value type</th>
-          <th>Flags</th>
-          <th>Seen</th>
-          <th style="width:60px"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr 
-          v-for="(param, index) in parameters" 
-          :key="param.id"
-          :class="{ 'selected': selectedParameter?.id === param.id }"
-          @click="openDrawer(param)"
-          @contextmenu="showContextMenu($event, param)"
-        >
-          <td style="text-align:center;color:var(--text-muted);font-size:10px">
-            {{ index + 1 }}
-          </td>
-          <td>
-            <span class="param-name">{{ param.name }}</span>
-          </td>
-          <td>
-            <span :class="`loc loc-${param.location}`">{{ param.location }}</span>
-          </td>
-          <td class="val-type">
-            {{ getDisplayValueType(param.valueTypes) }}
-          </td>
-          <td>
-            <template v-if="param.flags.length > 0">
-              <span 
-                v-for="flag in param.flags" 
-                :key="flag"
-                :class="`flag flag-${flag}`"
-              >
-                {{ flag.toUpperCase() }}
-              </span>
-            </template>
-            <span v-else style="color:var(--text-muted)">—</span>
-          </td>
-          <td style="color:var(--text-muted)">
-            {{ param.count }}x
-          </td>
-          <td>
-            <div class="row-actions">
-              <button 
-                class="btn btn-ghost btn-sm" 
-                title="Replay" 
-                @click.stop="replayRequest(param)"
-              >
-                &#x21BB;
-              </button>
-              <button 
-                class="btn btn-ghost btn-sm" 
-                title="Copy name" 
-                @click.stop="copyParameterName(param.name)"
-              >
-                &#x2398;
-              </button>
-              <button 
-                class="btn btn-ghost btn-sm" 
-                title="Copy endpoint" 
-                @click.stop="copyEndpoint(param)"
-              >
-                &#x1F517;
-              </button>
-            </div>
-          </td>
-        </tr>
-        
-        <!-- Empty state -->
-        <tr v-if="!hasParameters">
-          <td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">
-            No parameters found. Start intercepting traffic or run a historical scan.
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <DataTable 
+      :value="parameters"
+      :selection="selectedParameter"
+      selectionMode="single"
+      @rowSelect="onRowSelect"
+      @rowContextmenu="onRowContextMenu"
+      scrollable
+      scrollHeight="flex"
+      :emptyMessage="emptyMessage"
+      class="text-sm"
+    >
+      <Column field="index" header="#" style="width:3rem" class="text-center">
+        <template #body="{ index }">
+          <span class="text-xs text-muted-color">{{ index + 1 }}</span>
+        </template>
+      </Column>
+      
+      <Column field="name" header="Parameter" sortable>
+        <template #body="{ data }">
+          <span class="font-mono font-medium">{{ data.name }}</span>
+        </template>
+      </Column>
+      
+      <Column field="location" header="Location" sortable style="width:6rem">
+        <template #body="{ data }">
+          <Tag 
+            :value="data.location" 
+            :class="getLocationTagClass(data.location)"
+            class="text-xs"
+          />
+        </template>
+      </Column>
+      
+      <Column field="valueTypes" header="Value type" style="width:8rem">
+        <template #body="{ data }">
+          <span class="text-muted-color text-xs">{{ getDisplayValueType(data.valueTypes) }}</span>
+        </template>
+      </Column>
+      
+      <Column field="flags" header="Flags" style="width:8rem">
+        <template #body="{ data }">
+          <div class="flex gap-1 flex-wrap" v-if="data.flags.length > 0">
+            <Tag 
+              v-for="flag in data.flags" 
+              :key="flag"
+              :value="flag.toUpperCase()"
+              :class="getFlagTagClass(flag)"
+              class="text-xs"
+            />
+          </div>
+          <span v-else class="text-muted-color">—</span>
+        </template>
+      </Column>
+      
+      <Column field="count" header="Seen" sortable style="width:4rem">
+        <template #body="{ data }">
+          <span class="text-muted-color text-xs">{{ data.count }}x</span>
+        </template>
+      </Column>
+      
+      <Column header="Actions" style="width:8rem">
+        <template #body="{ data }">
+          <div class="flex gap-1">
+            <Button 
+              icon="pi pi-refresh" 
+              variant="text" 
+              size="small"
+              v-tooltip="'Replay'"
+              @click="replayRequest(data)"
+            />
+            <Button 
+              icon="pi pi-copy" 
+              variant="text" 
+              size="small"
+              v-tooltip="'Copy name'"
+              @click="copyParameterName(data.name)"
+            />
+            <Button 
+              icon="pi pi-link" 
+              variant="text" 
+              size="small"
+              v-tooltip="'Copy endpoint'"
+              @click="copyEndpoint(data)"
+            />
+          </div>
+        </template>
+      </Column>
+    </DataTable>
     
     <!-- Context Menu -->
     <ContextMenu
@@ -98,6 +104,10 @@
 
 <script setup lang="ts">
 import { inject, computed, ref } from 'vue';
+import DataTable from 'primevue/datatable';
+import Column from 'primevue/column';
+import Button from 'primevue/button';
+import Tag from 'primevue/tag';
 import { useInventory } from '../../composables/useInventory';
 import ContextMenu from './ContextMenu.vue';
 import type { Parameter, ValueType, Caido } from '@param-inventory/shared';
@@ -111,10 +121,33 @@ const contextMenuParameter = ref<Parameter | null>(null);
 const contextMenuX = ref(0);
 const contextMenuY = ref(0);
 
+const emptyMessage = 'No parameters found. Start intercepting traffic or run a historical scan.';
+
 function getDisplayValueType(valueTypes: ValueType[]): string {
   if (valueTypes.length === 0) return 'Unknown';
   if (valueTypes.length === 1) return valueTypes[0];
   return valueTypes[0] + ' (+' + (valueTypes.length - 1) + ')';
+}
+
+function getLocationTagClass(location: string): string {
+  const classes = {
+    query: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+    json: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+    form: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
+    header: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
+    cookie: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
+    path: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
+  };
+  return classes[location.toLowerCase() as keyof typeof classes] || 'bg-surface-100 text-surface-800 dark:bg-surface-700 dark:text-surface-300';
+}
+
+function getFlagTagClass(flag: string): string {
+  const classes = {
+    interesting: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300',
+    new: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300',
+    sensitive: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
+  };
+  return classes[flag.toLowerCase() as keyof typeof classes] || 'bg-surface-100 text-surface-800 dark:bg-surface-700 dark:text-surface-300';
 }
 
 const emit = defineEmits<{
@@ -126,12 +159,17 @@ function openDrawer(parameter: Parameter) {
   emit('open-drawer', parameter);
 }
 
-function showContextMenu(event: MouseEvent, parameter: Parameter) {
-  event.preventDefault();
+function onRowSelect(event: any) {
+  openDrawer(event.data);
+}
+
+function onRowContextMenu(event: any) {
+  const mouseEvent = event.originalEvent;
+  mouseEvent.preventDefault();
   
-  contextMenuParameter.value = parameter;
-  contextMenuX.value = event.clientX;
-  contextMenuY.value = event.clientY;
+  contextMenuParameter.value = event.data;
+  contextMenuX.value = mouseEvent.clientX;
+  contextMenuY.value = mouseEvent.clientY;
   contextMenuVisible.value = true;
 }
 

@@ -3,11 +3,11 @@
  */
 
 import { reactive, readonly } from 'vue';
-import type { Caido } from "../mock-caido-sdk";
-import type { RpcMethods, BackendEvents, InventoryFilters, Parameter, Domain, InventoryStats, Observation } from '@param-inventory/shared';
+import type { Caido } from "@caido/sdk-frontend";
+import type { InventoryBackendAPI, InventoryBackendEvents, InventoryFilters, Parameter, Domain, InventoryStats, Observation } from '@param-inventory/shared';
 import { useInventory } from './useInventory';
 
-let caido: Caido | null = null;
+let caido: Caido<InventoryBackendAPI, InventoryBackendEvents> | null = null;
 
 // Global reactive state for backend connection status
 const connectionStatus = reactive({
@@ -19,7 +19,7 @@ const connectionStatus = reactive({
 export function useBackend() {
   const { updateParameters, updateDomains, updateStats } = useInventory();
   
-  function init(caidoInstance: Caido) {
+  function init(caidoInstance: Caido<InventoryBackendAPI, InventoryBackendEvents>) {
     caido = caidoInstance;
     connectionStatus.isConnected = true;
     

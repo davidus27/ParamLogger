@@ -4,16 +4,17 @@
 
 import { createApp } from 'vue';
 import App from './views/App.vue';
-import type { Caido } from './mock-caido-sdk';
-import { mockCaido } from './mock-caido-sdk';
+import type { Caido } from '@caido/sdk-frontend';
+import type { InventoryBackendAPI, InventoryBackendEvents } from '@param-inventory/shared';
 
 import PrimeVue from 'primevue/config';
+import ToastService from 'primevue/toastservice';
+import { Classic } from '@caido/primevue';
 import 'primeicons/primeicons.css';
 
 import './style.css';
 
-export function init(caido?: Caido): void {
-  const sdk = caido || mockCaido;
+export function init(caido: Caido<InventoryBackendAPI, InventoryBackendEvents>): void {
 
   const container = document.createElement("div");
   container.id = "param-inventory-root";
@@ -21,27 +22,32 @@ export function init(caido?: Caido): void {
   container.style.height = "100%";
 
   const app = createApp(App);
-  app.use(PrimeVue, { theme: 'none' });
-  app.provide('caido', sdk);
+  app.use(PrimeVue, { unstyled: true, pt: Classic });
+  app.use(ToastService);
+  app.provide('caido', caido);
   app.mount(container);
 
-  sdk.navigation.addPage("/param-inventory", {
+  caido.navigation.addPage("/param-inventory", {
     body: container
   });
 
-  sdk.sidebar.registerItem("Parameter Inventory", "/param-inventory", {
+  caido.sidebar.registerItem("Parameter Inventory", "/param-inventory", {
     icon: "fas fa-list"
   });
 }
 
 if (import.meta.env.DEV) {
-  document.addEventListener('DOMContentLoaded', () => {
-    const appElement = document.getElementById('app');
-    if (appElement) {
+  // Only import mock in development mode
+  import('./mock-caido-sdk').then(({ mockCaido }) => {
+    document.addEventListener('DOMContentLoaded', () => {
+      const appElement = document.getElementById('app');
+      if (appElement) {
       const app = createApp(App);
-      app.use(PrimeVue, { theme: 'none' });
+      app.use(PrimeVue, { unstyled: true, pt: Classic });
+      app.use(ToastService);
       app.provide('caido', mockCaido);
       app.mount(appElement);
-    }
+      }
+    });
   });
 }

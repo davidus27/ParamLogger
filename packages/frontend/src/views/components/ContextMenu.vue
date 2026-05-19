@@ -1,87 +1,14 @@
 <template>
-  <div 
-    v-if="isVisible" 
-    :class="['context-menu']"
-    :style="menuStyle"
-    @click.stop
-  >
-    <div class="context-menu-items">
-      <button 
-        class="context-item" 
-        @click="replayRequest"
-        :disabled="!canReplay"
-      >
-        <span class="icon">&#x21BB;</span>
-        <span>Replay Request</span>
-        <span class="shortcut">R</span>
-      </button>
-      
-      <button 
-        class="context-item" 
-        @click="viewInHistory"
-        :disabled="!canViewHistory"
-      >
-        <span class="icon">&#x1F50D;</span>
-        <span>View in History</span>
-        <span class="shortcut">H</span>
-      </button>
-      
-      <div class="context-separator"></div>
-      
-      <button 
-        class="context-item" 
-        @click="copyParameterName"
-      >
-        <span class="icon">&#x2398;</span>
-        <span>Copy Parameter Name</span>
-        <span class="shortcut">C</span>
-      </button>
-      
-      <button 
-        class="context-item" 
-        @click="copyEndpoint"
-      >
-        <span class="icon">&#x1F517;</span>
-        <span>Copy Endpoint</span>
-        <span class="shortcut">E</span>
-      </button>
-      
-      <button 
-        class="context-item" 
-        @click="copyFullUrl"
-      >
-        <span class="icon">&#x1F310;</span>
-        <span>Copy Full URL</span>
-        <span class="shortcut">U</span>
-      </button>
-      
-      <div class="context-separator"></div>
-      
-      <button 
-        class="context-item" 
-        @click="sendToAutomate"
-        :disabled="!canSendToAutomate"
-      >
-        <span class="icon">&#x27A1;</span>
-        <span>Send to Automate</span>
-        <span class="shortcut">A</span>
-      </button>
-      
-      <button 
-        class="context-item" 
-        @click="sendToRepeater"
-        :disabled="!canSendToRepeater"
-      >
-        <span class="icon">&#x1F501;</span>
-        <span>Send to Repeater</span>
-        <span class="shortcut">T</span>
-      </button>
-    </div>
-  </div>
+  <ContextMenu 
+    ref="contextMenuRef" 
+    :model="menuItems" 
+    @hide="emit('close')"
+  />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, inject, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, inject, nextTick, watch } from 'vue';
+import ContextMenu from 'primevue/contextmenu';
 import type { Parameter, Caido } from '@param-inventory/shared';
 
 interface ContextMenuProps {
@@ -100,11 +27,7 @@ const emit = defineEmits<{
 }>();
 
 const caido = inject<Caido>('caido');
-
-const menuStyle = computed(() => ({
-  left: `${props.x}px`,
-  top: `${props.y}px`,
-}));
+const contextMenuRef = ref();
 
 const canReplay = computed(() => {
   return props.parameter && props.parameter.exampleRequestIds.length > 0;
@@ -121,6 +44,62 @@ const canSendToAutomate = computed(() => {
 const canSendToRepeater = computed(() => {
   return props.parameter && caido && typeof caido.repeater !== 'undefined';
 });
+
+const menuItems = computed(() => [
+  {
+    label: 'Replay Request',
+    icon: 'pi pi-refresh',
+    disabled: !canReplay.value,
+    command: replayRequest
+  },
+  {
+    label: 'View in History',
+    icon: 'pi pi-search',
+    disabled: !canViewHistory.value,
+    command: viewInHistory
+  },
+  { separator: true },
+  {
+    label: 'Copy Parameter Name',
+    icon: 'pi pi-copy',
+    command: copyParameterName
+  },
+  {
+    label: 'Copy Endpoint',
+    icon: 'pi pi-link',
+    command: copyEndpoint
+  },
+  {
+    label: 'Copy Full URL',
+    icon: 'pi pi-external-link',
+    command: copyFullUrl
+  },
+  { separator: true },
+  {
+    label: 'Send to Automate',
+    icon: 'pi pi-send',
+    disabled: !canSendToAutomate.value,
+    command: sendToAutomate
+  },
+  {
+    label: 'Send to Repeater',
+    icon: 'pi pi-replay',
+    disabled: !canSendToRepeater.value,
+    command: sendToRepeater
+  }
+]);
+
+// Show context menu when props change
+watch(
+  () => props.isVisible,
+  (visible) => {
+    if (visible && contextMenuRef.value) {
+      nextTick(() => {
+        contextMenuRef.value.show({ x: props.x, y: props.y });
+      });
+    }
+  }
+);
 
 async function replayRequest() {
   if (!props.parameter || !canReplay.value) return;
@@ -265,123 +244,5 @@ async function sendToRepeater() {
   emit('close');
 }
 
-function handleKeydown(e: KeyboardEvent) {
-  if (!props.isVisible || !props.parameter) return;
-  
-  // Handle keyboard shortcuts when context menu is open
-  switch (e.key.toLowerCase()) {
-    case 'r':
-      e.preventDefault();
-      if (canReplay.value) replayRequest();
-      break;
-    case 'h':
-      e.preventDefault();
-      if (canViewHistory.value) viewInHistory();
-      break;
-    case 'c':
-      e.preventDefault();
-      copyParameterName();
-      break;
-    case 'e':
-      e.preventDefault();
-      copyEndpoint();
-      break;
-    case 'u':
-      e.preventDefault();
-      copyFullUrl();
-      break;
-    case 'a':
-      e.preventDefault();
-      if (canSendToAutomate.value) sendToAutomate();
-      break;
-    case 't':
-      e.preventDefault();
-      if (canSendToRepeater.value) sendToRepeater();
-      break;
-    case 'escape':
-      e.preventDefault();
-      emit('close');
-      break;
-  }
-}
-
-function handleClickOutside(e: MouseEvent) {
-  if (props.isVisible) {
-    emit('close');
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('keydown', handleKeydown);
-  document.addEventListener('click', handleClickOutside);
-});
-
-onUnmounted(() => {
-  document.removeEventListener('keydown', handleKeydown);
-  document.removeEventListener('click', handleClickOutside);
-});
+// Event handlers are now managed by PrimeVue ContextMenu component
 </script>
-
-<style scoped>
-.context-menu {
-  position: fixed;
-  z-index: 1000;
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  min-width: 180px;
-  padding: 4px 0;
-  font-size: 12px;
-}
-
-.context-menu-items {
-  display: flex;
-  flex-direction: column;
-}
-
-.context-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border: none;
-  background: none;
-  color: var(--text);
-  cursor: pointer;
-  font-size: 12px;
-  text-align: left;
-  white-space: nowrap;
-}
-
-.context-item:hover:not(:disabled) {
-  background: var(--accent);
-  color: var(--text-on-accent);
-}
-
-.context-item:disabled {
-  color: var(--text-muted);
-  cursor: not-allowed;
-}
-
-.context-item .icon {
-  width: 14px;
-  text-align: center;
-  font-size: 11px;
-}
-
-.context-item .shortcut {
-  margin-left: auto;
-  font-size: 10px;
-  opacity: 0.7;
-  padding: 1px 4px;
-  border: 1px solid var(--border);
-  border-radius: 2px;
-}
-
-.context-separator {
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
-}
-</style>

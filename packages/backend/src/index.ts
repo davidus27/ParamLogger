@@ -2,11 +2,10 @@
  * Backend plugin entry point for Parameter Inventory
  */
 
-import type { SDK, RequestEvent } from "./caido-sdk-mock.js";
-import type { PluginConfig, InventoryFilters, BackendEvents } from "@param-inventory/shared";
+import type { Caido, Request, Body } from "caido:plugin";
+import type { PluginConfig, InventoryFilters, BackendEvents, ParsedRequest } from "@param-inventory/shared";
 import { DEFAULT_CONFIG, DEFAULT_REDACTION_PATTERNS, SENSITIVE_VALUE_PATTERNS, REDACTION_MODE, REDACTED_TEXT } from "@param-inventory/shared";
 
-type RpcMethods = Record<string, (...args: any[]) => Promise<any>>;
 import { ParameterStore } from "./store.js";
 import { RequestParser } from "./parser.js";
 import { classifyParameter } from "./classifier.js";
@@ -17,14 +16,14 @@ const parser = new RequestParser();
 // Global plugin state
 let store: ParameterStore;
 let config: PluginConfig;
-let sdk: SDK<RpcMethods, BackendEvents>;
+let sdk: Caido;
 let isHistoricalScanRunning = false;
 let historicalScanAborted = false;
 
 /**
  * Initialize the parameter inventory plugin
  */
-export function init(pluginSDK: SDK<RpcMethods, BackendEvents>): void {
+export function init(pluginSDK: Caido): void {
   console.log("Parameter Inventory plugin loaded");
   
   // Initialize global state
@@ -51,9 +50,9 @@ function setupRequestInterception(): void {
   console.log("Setting up request interception...");
   
   // Intercept all incoming requests for live parsing
-  sdk.events.onInterceptRequest(async (event: RequestEvent) => {
+  sdk.events.onInterceptRequest(async (sdk, request: Request) => {
     try {
-      await processRequest(event.request);
+      await processRequest(request);
     } catch (error) {
       console.error("Error processing intercepted request:", error);
     }
@@ -65,7 +64,7 @@ function setupRequestInterception(): void {
 /**
  * Check if request is in Caido scope
  */
-function isRequestInScope(request: any): boolean {
+function isRequestInScope(request: Request): boolean {
   try {
     // Check if SDK provides scope checking
     if (sdk.requests && typeof sdk.requests.inScope === 'function') {
@@ -78,7 +77,7 @@ function isRequestInScope(request: any): boolean {
     }
     
     // Basic heuristics if no scope API available
-    const url = request.getUrl?.() || `${request.getHost?.()}${request.getPath?.()}`;
+    const url = `${request.getHost()}${request.getPath()}`;
     
     // Skip common out-of-scope URLs
     const outOfScopePatterns = [
@@ -95,18 +94,19 @@ function isRequestInScope(request: any): boolean {
   }
 }
 
+
 /**
  * Process a single request and update the inventory
  */
-async function processRequest(request: any): Promise<void> {
+async function processRequest(request: Request): Promise<void> {
   try {
     // Check if request is in scope before processing
     if (!isRequestInScope(request)) {
-      console.debug('Skipping out-of-scope request:', request.getUrl?.());
+      console.debug('Skipping out-of-scope request:', `${request.getHost()}${request.getPath()}`);
       return;
     }
     
-    // Parse the request to extract parameters
+    // Parse the request to extract parameters and metadata
     const parsedRequest = parser.parseRequest(request);
     
     // Process each parameter through the full pipeline
@@ -181,44 +181,44 @@ function registerRpcMethods(): void {
   console.log("Registering RPC methods...");
   
   // Get filtered inventory
-  sdk.api.register('getInventory', async (filters?: InventoryFilters) => {
+  sdk.api.register('getInventory', async (sdk, filters?: InventoryFilters) => {
     return store.getParameters(filters);
   });
   
   // Get all domains
-  sdk.api.register('getDomains', async () => {
+  sdk.api.register('getDomains', async (sdk) => {
     return store.getDomains();
   });
   
   // Get parameter detail
-  sdk.api.register('getParameterDetail', async (id: string) => {
+  sdk.api.register('getParameterDetail', async (sdk, id: string) => {
     return store.getParameter(id);
   });
   
   // Get parameter observations
-  sdk.api.register('getParameterObservations', async (id: string, limit?: number) => {
+  sdk.api.register('getParameterObservations', async (sdk, id: string, limit?: number) => {
     return store.getParameterObservations(id, limit);
   });
   
   // Get current stats
-  sdk.api.register('getStats', async () => {
+  sdk.api.register('getStats', async (sdk) => {
     return store.getStats();
   });
   
   // Export wordlist
-  sdk.api.register('exportWordlist', async (filters?: InventoryFilters) => {
+  sdk.api.register('exportWordlist', async (sdk, filters?: InventoryFilters) => {
     return store.exportWordlist(filters);
   });
   
   // Clear inventory
-  sdk.api.register('clearInventory', async () => {
+  sdk.api.register('clearInventory', async (sdk) => {
     store.clear();
     sdk.api.send('stats-updated', store.getStats());
     return;
   });
   
   // Trigger historical scan
-  sdk.api.register('triggerHistoricalScan', async () => {
+  sdk.api.register('triggerHistoricalScan', async (sdk) => {
     if (!isHistoricalScanRunning) {
       triggerHistoricalScan();
     }
@@ -246,36 +246,28 @@ async function triggerHistoricalScan(): Promise<void> {
   let totalCount = 0;
   
   try {
-    // First, get a rough count of total requests (this is an approximation)
-    const sampleBatch = await sdk.requests.query().first(1000).execute();
-    totalCount = sampleBatch.length;
+    // Notify frontend that scan has started (with unknown total initially)
+    sdk.api.send('scan-started', { total: 0 });
+    store.updateScanProgress(0, 0, false);
+    sdk.api.send('scan-progress', { processed: 0, total: 0, isComplete: false });
     
-    // If we got a full batch, there are probably more requests
-    if (sampleBatch.length === 1000) {
-      // Estimate total count by testing larger batches
-      let estimatedTotal = 1000;
-      const testBatch = await sdk.requests.query().first(5000).execute();
-      if (testBatch.length > 1000) {
-        estimatedTotal = testBatch.length;
-        totalCount = estimatedTotal;
-      }
-    }
-    
-    // Notify frontend that scan has started
-    sdk.api.send('scan-started', { total: totalCount });
-    store.updateScanProgress(0, totalCount, false);
-    sdk.api.send('scan-progress', { processed: 0, total: totalCount, isComplete: false });
-    
-    // Process requests in batches to avoid memory issues
+    // Process requests in batches using cursor-based pagination
     const batchSize = 100;
     let hasMoreRequests = true;
-    let offset = 0;
+    let cursor: string | null = null;
     
     while (hasMoreRequests && !historicalScanAborted) {
-      // Get next batch of requests
-      const requests = await sdk.requests.query()
-        .first(batchSize)
-        .execute();
+      // Build query with cursor for pagination
+      let query = sdk.requests.query().first(batchSize);
+      if (cursor) {
+        query = query.after(cursor);
+      }
+      
+      // Execute query and get RequestsConnection
+      const requestsConnection = await query.execute();
+      
+      // Extract items from the connection
+      const requests = requestsConnection.items || [];
       
       if (requests.length === 0) {
         hasMoreRequests = false;
@@ -283,21 +275,23 @@ async function triggerHistoricalScan(): Promise<void> {
       }
       
       // Process each request in the batch
-      for (const request of requests) {
+      for (const requestItem of requests) {
         if (historicalScanAborted) {
           break;
         }
         
         try {
+          // Extract the actual request from the connection item
+          const request = requestItem.request;
           await processRequest(request);
           processedCount++;
           
           // Update progress every 10 requests
           if (processedCount % 10 === 0) {
-            store.updateScanProgress(processedCount, Math.max(totalCount, processedCount), false);
+            store.updateScanProgress(processedCount, 0, false);
             sdk.api.send('scan-progress', { 
               processed: processedCount, 
-              total: Math.max(totalCount, processedCount), 
+              total: 0, // We don't know the total until we finish
               isComplete: false 
             });
           }
@@ -307,16 +301,18 @@ async function triggerHistoricalScan(): Promise<void> {
         }
       }
       
-      // If we got fewer requests than batch size, we've reached the end
-      if (requests.length < batchSize) {
+      // Check if there are more pages using pageInfo
+      const pageInfo = requestsConnection.pageInfo;
+      if (pageInfo && pageInfo.hasNextPage && pageInfo.endCursor) {
+        cursor = pageInfo.endCursor;
+      } else {
         hasMoreRequests = false;
       }
       
-      offset += batchSize;
-      
-      // Update total count estimate if we processed more than expected
-      if (processedCount > totalCount) {
-        totalCount = processedCount + 1000; // Add buffer for remaining requests
+      // If we didn't get a full batch and no explicit hasNextPage info,
+      // assume we've reached the end
+      if (requests.length < batchSize && (!pageInfo || !pageInfo.hasNextPage)) {
+        hasMoreRequests = false;
       }
     }
     
@@ -327,7 +323,7 @@ async function triggerHistoricalScan(): Promise<void> {
     } else {
       console.log(`Historical scan completed: processed ${processedCount} requests in ${duration}ms`);
       
-      // Mark scan as complete
+      // Mark scan as complete with final counts
       store.updateScanProgress(processedCount, processedCount, true);
       sdk.api.send('scan-progress', { processed: processedCount, total: processedCount, isComplete: true });
       sdk.api.send('scan-completed', { processed: processedCount, duration });

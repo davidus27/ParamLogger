@@ -1,6 +1,7 @@
 import type { Request } from '@caido/sdk-backend';
 import { 
   ParsedParameter, 
+  ParsedRequest,
   ParameterLocation, 
   ValueType,
   EXCLUDED_HEADERS,
@@ -12,9 +13,9 @@ import {
 
 export class RequestParser {
   /**
-   * Parse all parameters from a Caido request
+   * Parse all parameters from a Caido request and return complete ParsedRequest object
    */
-  public parseRequest(request: Request): ParsedParameter[] {
+  public parseRequest(request: Request): ParsedRequest {
     const parameters: ParsedParameter[] = [];
 
     try {
@@ -37,7 +38,28 @@ export class RequestParser {
       console.error('Error parsing request:', error);
     }
 
-    return parameters;
+    // Extract metadata from the request
+    const host = request.getHost();
+    const path = request.getPath();
+    const method = request.getMethod();
+    const timestamp = request.getCreatedAt();
+    const requestId = request.getId();
+    
+    // Extract domain from host (remove port if present)
+    const domain = host.split(':')[0];
+    
+    // Normalize path by replacing dynamic segments with placeholders
+    const normalizedPath = this.normalizePath(path);
+    
+    return {
+      domain,
+      method,
+      path,
+      normalizedPath,
+      requestId,
+      timestamp,
+      parameters
+    };
   }
 
   /**
@@ -119,8 +141,9 @@ export class RequestParser {
           continue;
         }
 
-        // Handle multi-value headers
-        for (const value of values) {
+        // Handle multi-value headers (SDK returns string[] for header values)
+        const headerValues = Array.isArray(values) ? values : [values];
+        for (const value of headerValues) {
           parameters.push({
             location: ParameterLocation.HEADER,
             name,
@@ -198,7 +221,7 @@ export class RequestParser {
     const parameters: ParsedParameter[] = [];
 
     try {
-      const json = body.toJson();
+      const json = body.toJson(); // Now synchronous according to the real SDK
       const flattenedParams = this.flattenObject(json);
 
       for (const [name, value] of Object.entries(flattenedParams)) {
@@ -225,7 +248,7 @@ export class RequestParser {
     const parameters: ParsedParameter[] = [];
 
     try {
-      const formData = body.toText();
+      const formData = body.toText(); // Now synchronous according to the real SDK
       const searchParams = new URLSearchParams(formData);
 
       for (const [name, value] of searchParams.entries()) {
@@ -251,7 +274,7 @@ export class RequestParser {
     const parameters: ParsedParameter[] = [];
 
     try {
-      const bodyText = body.toText();
+      const bodyText = body.toText(); // Now synchronous according to the real SDK
       // Basic multipart parsing - extract field names from Content-Disposition headers
       const fieldMatches = bodyText.match(/name="([^"]+)"/g);
       
@@ -395,5 +418,41 @@ export class RequestParser {
     }
 
     return cookies;
+  }
+
+  /**
+   * Normalize a path by replacing dynamic segments with placeholders
+   */
+  private normalizePath(path: string): string {
+    if (!path || path === '/') {
+      return '/';
+    }
+
+    // Split path into segments
+    const segments = path.split('/').filter(segment => segment.length > 0);
+    
+    // Replace dynamic-looking segments with placeholders
+    const normalizedSegments = segments.map(segment => {
+      // Numeric ID
+      if (/^\d+$/.test(segment)) return '{id}';
+      
+      // UUID
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(segment)) {
+        return '{uuid}';
+      }
+      
+      // Hash-like (hex strings longer than 8 chars)
+      if (/^[a-f0-9]{9,64}$/i.test(segment)) return '{hash}';
+      
+      // Long alphanumeric strings (likely IDs)
+      if (segment.length > 10 && /^[a-zA-Z0-9]+$/.test(segment)) {
+        return '{id}';
+      }
+      
+      // Keep as-is
+      return segment;
+    });
+    
+    return '/' + normalizedSegments.join('/');
   }
 }

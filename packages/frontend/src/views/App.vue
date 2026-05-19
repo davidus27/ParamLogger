@@ -1,7 +1,7 @@
 <template>
-  <div class="app">
+  <div class="flex flex-col h-screen bg-surface-0 dark:bg-surface-900 text-surface-900 dark:text-surface-0">
     <!-- Header with search and actions -->
-    <div class="header">
+    <div class="flex-shrink-0">
       <SearchHeader 
         @show-toast="showToast"
         @show-help="helpDialog?.open()"
@@ -9,24 +9,29 @@
       />
     </div>
     
-    <!-- Tree Panel (left) -->
-    <div class="tree-panel">
-      <TreePanel />
-    </div>
-    
-    <!-- Main Panel (right) -->
-    <div class="main-panel">
-      <FilterBar />
-      <div class="table-wrap">
-        <ParamTable 
-          @open-drawer="openDrawer" 
-          @show-toast="showToast"
-        />
+    <div class="flex flex-1 min-h-0">
+      <!-- Tree Panel (left) -->
+      <div 
+        class="flex-shrink-0 border-r border-surface-200 dark:border-surface-700"
+        :style="{ width: settings.treePanelWidth + 'px' }"
+      >
+        <TreePanel />
+      </div>
+      
+      <!-- Main Panel (right) -->
+      <div class="flex flex-col flex-1 min-w-0">
+        <FilterBar />
+        <div class="flex-1 min-h-0">
+          <ParamTable 
+            @open-drawer="openDrawer" 
+            @show-toast="showToast"
+          />
+        </div>
       </div>
     </div>
     
     <!-- Footer with status -->
-    <div class="statusbar">
+    <div class="flex-shrink-0">
       <StatusBar />
     </div>
     
@@ -50,7 +55,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, inject, computed } from 'vue';
-import type { Caido } from '../mock-caido-sdk';
+import type { Caido } from '@caido/sdk-frontend';
+import type { InventoryBackendAPI, InventoryBackendEvents } from '@param-inventory/shared';
 import SearchHeader from './components/SearchHeader.vue';
 import TreePanel from './components/TreePanel.vue';
 import FilterBar from './components/FilterBar.vue';
@@ -66,7 +72,7 @@ import { useKeyboardShortcuts, globalShortcuts } from '../composables/useKeyboar
 import { useSettings } from '../composables/useSettings';
 import type { Parameter, FrontendSettings } from '@param-inventory/shared';
 
-const caido = inject<Caido>('caido');
+const caido = inject<Caido<InventoryBackendAPI, InventoryBackendEvents>>('caido');
 const { 
   setSelectedParameter, 
   setLoading, 

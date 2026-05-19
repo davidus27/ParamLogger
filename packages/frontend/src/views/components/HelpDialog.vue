@@ -1,142 +1,173 @@
 <template>
-  <div v-if="isVisible" class="help-overlay" @click="close">
-    <div class="help-dialog" @click.stop>
-      <div class="help-header">
-        <h2>Keyboard Shortcuts</h2>
-        <button class="btn btn-ghost" @click="close">&times;</button>
+  <Dialog 
+    v-model:visible="isVisible"
+    modal
+    :closable="true"
+    :draggable="false"
+    class="w-full max-w-2xl"
+    @hide="onHide"
+  >
+    <template #header>
+      <div class="flex items-center gap-2">
+        <i class="pi pi-question-circle text-primary"></i>
+        <span class="font-semibold">Keyboard Shortcuts</span>
       </div>
-      
-      <div class="help-content">
-        <div class="shortcut-section">
-          <h3>Navigation</h3>
-          <div class="shortcut-list">
-            <div class="shortcut-item">
-              <kbd>/</kbd>
-              <span>Focus search input</span>
+    </template>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-2">
+      <div class="space-y-4">
+        <div>
+          <h3 class="font-semibold text-surface-700 dark:text-surface-300 mb-3 flex items-center gap-2">
+            <i class="pi pi-compass text-primary"></i>
+            Navigation
+          </h3>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">/</kbd>
+              <span class="text-sm">Focus search input</span>
             </div>
-            <div class="shortcut-item">
-              <kbd>Escape</kbd>
-              <span>Close dialogs and clear search</span>
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">Escape</kbd>
+              <span class="text-sm">Close dialogs and clear search</span>
             </div>
-            <div class="shortcut-item">
-              <kbd>?</kbd>
-              <span>Show this help dialog</span>
-            </div>
-          </div>
-        </div>
-        
-        <div class="shortcut-section">
-          <h3>Actions</h3>
-          <div class="shortcut-list">
-            <div class="shortcut-item">
-              <kbd>Ctrl + E</kbd>
-              <span>Export wordlist</span>
-            </div>
-            <div class="shortcut-item">
-              <kbd>Ctrl + R</kbd>
-              <span>Refresh inventory</span>
-            </div>
-            <div class="shortcut-item">
-              <kbd>Alt + C</kbd>
-              <span>Clear all filters</span>
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">?</kbd>
+              <span class="text-sm">Show this help dialog</span>
             </div>
           </div>
         </div>
         
-        <div class="shortcut-section">
-          <h3>Filters & Navigation</h3>
-          <div class="shortcut-list">
-            <div class="shortcut-item">
-              <kbd>I</kbd>
-              <span>Toggle interesting parameters</span>
+        <div>
+          <h3 class="font-semibold text-surface-700 dark:text-surface-300 mb-3 flex items-center gap-2">
+            <i class="pi pi-cog text-primary"></i>
+            Actions
+          </h3>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">Ctrl + E</kbd>
+              <span class="text-sm">Export wordlist</span>
             </div>
-            <div class="shortcut-item">
-              <kbd>N</kbd>
-              <span>Toggle new parameters</span>
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">Ctrl + R</kbd>
+              <span class="text-sm">Refresh inventory</span>
             </div>
-            <div class="shortcut-item">
-              <kbd>J</kbd>
-              <span>Select next parameter</span>
-            </div>
-            <div class="shortcut-item">
-              <kbd>K</kbd>
-              <span>Select previous parameter</span>
-            </div>
-            <div class="shortcut-item">
-              <kbd>Enter</kbd>
-              <span>Open parameter detail drawer</span>
-            </div>
-            <div class="shortcut-item">
-              <kbd>T</kbd>
-              <span>Toggle tree panel visibility</span>
-            </div>
-          </div>
-        </div>
-        
-        <div class="shortcut-section">
-          <h3>Quick Actions</h3>
-          <div class="shortcut-list">
-            <div class="shortcut-item">
-              <kbd>C</kbd>
-              <span>Copy selected parameter name</span>
-            </div>
-            <div class="shortcut-item">
-              <kbd>E</kbd>
-              <span>Copy selected parameter endpoint</span>
-            </div>
-            <div class="shortcut-item">
-              <kbd>Ctrl + ,</kbd>
-              <span>Open settings</span>
-            </div>
-          </div>
-        </div>
-        
-        <div class="shortcut-section">
-          <h3>Context Menu (Right-click on parameter)</h3>
-          <div class="shortcut-list">
-            <div class="shortcut-item">
-              <kbd>R</kbd>
-              <span>Replay request</span>
-            </div>
-            <div class="shortcut-item">
-              <kbd>H</kbd>
-              <span>View in history</span>
-            </div>
-            <div class="shortcut-item">
-              <kbd>C</kbd>
-              <span>Copy parameter name</span>
-            </div>
-            <div class="shortcut-item">
-              <kbd>E</kbd>
-              <span>Copy endpoint</span>
-            </div>
-            <div class="shortcut-item">
-              <kbd>U</kbd>
-              <span>Copy full URL</span>
-            </div>
-            <div class="shortcut-item">
-              <kbd>A</kbd>
-              <span>Send to Automate</span>
-            </div>
-            <div class="shortcut-item">
-              <kbd>T</kbd>
-              <span>Send to Repeater</span>
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">Alt + C</kbd>
+              <span class="text-sm">Clear all filters</span>
             </div>
           </div>
         </div>
       </div>
       
-      <div class="help-footer">
-        <p>
-          <strong>Tip:</strong> Most shortcuts work globally, except context menu shortcuts which only work when the right-click menu is open.
-        </p>
+      <div class="space-y-4">
+        <div>
+          <h3 class="font-semibold text-surface-700 dark:text-surface-300 mb-3 flex items-center gap-2">
+            <i class="pi pi-filter text-primary"></i>
+            Filters & Navigation
+          </h3>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">I</kbd>
+              <span class="text-sm">Toggle interesting parameters</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">N</kbd>
+              <span class="text-sm">Toggle new parameters</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">J</kbd>
+              <span class="text-sm">Select next parameter</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">K</kbd>
+              <span class="text-sm">Select previous parameter</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">Enter</kbd>
+              <span class="text-sm">Open parameter detail drawer</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">T</kbd>
+              <span class="text-sm">Toggle tree panel visibility</span>
+            </div>
+          </div>
+        </div>
+        
+        <div>
+          <h3 class="font-semibold text-surface-700 dark:text-surface-300 mb-3 flex items-center gap-2">
+            <i class="pi pi-bolt text-primary"></i>
+            Quick Actions
+          </h3>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">C</kbd>
+              <span class="text-sm">Copy selected parameter name</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">E</kbd>
+              <span class="text-sm">Copy selected parameter endpoint</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+              <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">Ctrl + ,</kbd>
+              <span class="text-sm">Open settings</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
+    
+    <div class="mt-6">
+      <h3 class="font-semibold text-surface-700 dark:text-surface-300 mb-3 flex items-center gap-2">
+        <i class="pi pi-list text-primary"></i>
+        Context Menu (Right-click on parameter)
+      </h3>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+          <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">R</kbd>
+          <span class="text-sm">Replay request</span>
+        </div>
+        <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+          <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">H</kbd>
+          <span class="text-sm">View in history</span>
+        </div>
+        <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+          <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">C</kbd>
+          <span class="text-sm">Copy parameter name</span>
+        </div>
+        <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+          <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">E</kbd>
+          <span class="text-sm">Copy endpoint</span>
+        </div>
+        <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+          <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">U</kbd>
+          <span class="text-sm">Copy full URL</span>
+        </div>
+        <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+          <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">A</kbd>
+          <span class="text-sm">Send to Automate</span>
+        </div>
+        <div class="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded">
+          <kbd class="px-2 py-1 text-xs bg-surface-200 dark:bg-surface-700 rounded">T</kbd>
+          <span class="text-sm">Send to Repeater</span>
+        </div>
+      </div>
+    </div>
+    
+    <Message severity="info" :closable="false" class="mt-4">
+      <div class="flex items-start gap-2">
+        <i class="pi pi-info-circle mt-0.5"></i>
+        <div>
+          <strong>Tip:</strong> Most shortcuts work globally, except context menu shortcuts which only work when the right-click menu is open.
+        </div>
+      </div>
+    </Message>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import Dialog from 'primevue/dialog';
+import Message from 'primevue/message';
 
 const isVisible = ref(false);
 
@@ -150,6 +181,10 @@ function open() {
 
 function close() {
   isVisible.value = false;
+  emit('close');
+}
+
+function onHide() {
   emit('close');
 }
 
@@ -172,106 +207,3 @@ defineExpose({
   close
 });
 </script>
-
-<style scoped>
-.help-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 1500;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(4px);
-}
-
-.help-dialog {
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  max-width: 600px;
-  width: 90vw;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.help-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.help-header h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.help-content {
-  padding: 20px 24px;
-  overflow-y: auto;
-}
-
-.shortcut-section {
-  margin-bottom: 24px;
-}
-
-.shortcut-section:last-child {
-  margin-bottom: 0;
-}
-
-.shortcut-section h3 {
-  margin: 0 0 12px 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.shortcut-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.shortcut-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 13px;
-}
-
-.shortcut-item kbd {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-family: monospace;
-  font-size: 11px;
-  min-width: 60px;
-  text-align: center;
-  color: var(--text-muted);
-}
-
-.shortcut-item span {
-  color: var(--text);
-}
-
-.help-footer {
-  padding: 16px 24px 20px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.help-footer strong {
-  color: var(--text);
-}
-</style>

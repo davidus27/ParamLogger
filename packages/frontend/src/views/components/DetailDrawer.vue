@@ -1,15 +1,18 @@
 <template>
-  <div 
-    :class="['drawer', { 'open': isOpen }]"
+  <Drawer 
+    v-model:visible="isOpen"
+    position="right"
+    :style="{ width: drawerWidth + 'px' }"
+    @hide="close"
   >
-    <!-- Header -->
-    <div class="drawer-head">
-      <h3>{{ selectedParameter?.name || '' }}</h3>
-      <button class="btn btn-ghost" @click="close">&times;</button>
-    </div>
+    <template #header>
+      <div class="flex items-center gap-2 w-full">
+        <i class="pi pi-info-circle text-primary"></i>
+        <span class="font-semibold truncate">{{ selectedParameter?.name || 'Parameter Details' }}</span>
+      </div>
+    </template>
     
-    <!-- Body -->
-    <div class="drawer-body" v-if="selectedParameter">
+    <div v-if="selectedParameter" class="space-y-6">
       <div class="d-section">
         <h4>Details</h4>
         <div class="d-row">
@@ -110,17 +113,37 @@
       </div>
     </div>
     
-    <!-- Footer -->
-    <div class="drawer-foot" v-if="selectedParameter">
-      <button class="btn" @click="replayRequest">&#x21BB; Replay</button>
-      <button class="btn" @click="sendToAutomate">&#x27A1; Automate</button>
-      <button class="btn" @click="copyParameterName">&#x2398; Copy name</button>
-    </div>
-  </div>
+    <template #footer v-if="selectedParameter">
+      <div class="flex gap-2">
+        <Button 
+          icon="pi pi-refresh" 
+          label="Replay"
+          size="small"
+          @click="replayRequest"
+        />
+        <Button 
+          icon="pi pi-send" 
+          label="Automate"
+          size="small"
+          variant="outlined"
+          @click="sendToAutomate"
+        />
+        <Button 
+          icon="pi pi-copy" 
+          label="Copy name"
+          size="small"
+          variant="outlined"
+          @click="copyParameterName"
+        />
+      </div>
+    </template>
+  </Drawer>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, inject, watch } from 'vue';
+import Drawer from 'primevue/drawer';
+import Button from 'primevue/button';
 import type { Parameter, ValueType, Observation, Caido } from '@param-inventory/shared';
 import { useInventory } from '../../composables/useInventory';
 import { useBackend } from '../../composables/useBackend';
@@ -129,6 +152,7 @@ const isOpen = ref(false);
 const selectedParameter = ref<Parameter | null>(null);
 const observations = ref<Observation[]>([]);
 const isLoadingObservations = ref(false);
+const drawerWidth = ref(380);
 
 const { setSelectedParameter } = useInventory();
 const { getParameterObservations } = useBackend();

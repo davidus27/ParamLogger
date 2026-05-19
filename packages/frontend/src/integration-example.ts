@@ -7,7 +7,7 @@
 import { useInventory } from './composables/useInventory';
 import { useBackend } from './composables/useBackend';
 import { mockCaido } from './mock-caido-sdk';
-import type { Parameter, Domain, InventoryStats, ParameterLocation, ValueType, ParameterFlag } from '@param-inventory/shared';
+import type { Parameter, Domain, InventoryStats, ParameterLocation, ValueType, Flag } from '@param-inventory/shared';
 
 // Example usage of the reactive state system
 function demonstrateReactiveState() {
@@ -41,11 +41,11 @@ function demonstrateReactiveState() {
       method: 'GET',
       path: '/api/users',
       normalizedPath: '/api/users',
-      location: 'query' as ParameterLocation,
+      location: ParameterLocation.QUERY,
       name: 'search',
-      valueTypes: ['string' as ValueType],
+      valueTypes: [ValueType.STRING],
       dynamicConfidence: 0.8,
-      flags: ['new' as ParameterFlag],
+      flags: [Flag.NEW],
       count: 5,
       firstSeen: new Date(),
       lastSeen: new Date(),
@@ -58,11 +58,11 @@ function demonstrateReactiveState() {
       method: 'POST',
       path: '/api/users',
       normalizedPath: '/api/users',
-      location: 'json' as ParameterLocation,
+      location: ParameterLocation.JSON,
       name: 'user.email',
-      valueTypes: ['email' as ValueType],
+      valueTypes: [ValueType.EMAIL],
       dynamicConfidence: 0.9,
-      flags: ['sensitive' as ParameterFlag],
+      flags: [Flag.SENSITIVE],
       count: 12,
       firstSeen: new Date(),
       lastSeen: new Date(),
@@ -78,7 +78,7 @@ function demonstrateReactiveState() {
   setSearch('email');
   console.log('After search filter:', parameters.value.length);
   
-  toggleLocationFilter('json' as ParameterLocation);
+  toggleLocationFilter(ParameterLocation.JSON);
   console.log('After location filter:', parameters.value.length);
 
   resetFilters();
@@ -137,7 +137,7 @@ function demonstrateComponentIntegration() {
   console.log('Filtered parameters for "api":', inventory.parameters.value.length);
   
   // Example of how location filtering would work
-  inventory.toggleLocationFilter('query' as ParameterLocation);
+  inventory.toggleLocationFilter(ParameterLocation.QUERY);
   console.log('Parameters in query location:', inventory.parameters.value.length);
   
   return unsubscribe;

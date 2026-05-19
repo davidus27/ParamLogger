@@ -1,6 +1,6 @@
 import { ref, reactive } from 'vue';
-import type { FrontendSettings } from '@param-inventory/shared';
-import type { Caido } from '../mock-caido-sdk';
+import type { FrontendSettings, InventoryBackendAPI, InventoryBackendEvents } from '@param-inventory/shared';
+import type { Caido } from '@caido/sdk-frontend';
 
 const STORAGE_KEY = 'param-inventory-settings';
 
@@ -14,7 +14,7 @@ const defaultSettings: FrontendSettings = {
   defaultRedactionMode: 'partial',
 };
 
-export function useSettings(caido?: Caido) {
+export function useSettings(caido?: Caido<InventoryBackendAPI, InventoryBackendEvents>) {
   const settings = reactive<FrontendSettings>({ ...defaultSettings });
   const isLoaded = ref(false);
 

@@ -198,8 +198,8 @@ export const REDACTED_TEXT = '[REDACTED]';
 // Default plugin configuration
 export const DEFAULT_CONFIG = {
   maxParametersInMemory: 10000,
-  maxRedactedExamples: 5,
-  maxExampleRequests: 10,
+  maxExamplesPerParameter: 5,
+  maxExampleRequestIds: 10,
   autoScanHistoryOnInit: true,
   developmentMode: false,
   respectScope: true,
@@ -318,3 +318,7 @@ export const FLAG_CONFIG = {
     color: 'bg-green/10 text-green',
   },
 } as const;
+
+// Time thresholds
+export const NEW_PARAMETER_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+export const INTERESTING_DYNAMIC_THRESHOLD = 0.7;

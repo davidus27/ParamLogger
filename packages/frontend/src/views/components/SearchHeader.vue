@@ -1,39 +1,62 @@
 <template>
-  <span class="logo">&#9670; Param Inventory</span>
-  <span class="sep"></span>
-  <div class="search-global">
-    <span style="color: var(--text-muted)">&#x1F50D;</span>
-    <input 
-      ref="searchInput"
-      type="text" 
-      placeholder="Search params, endpoints, domains..."
-      :value="filters.search"
-      @input="onSearchChange"
-    />
-    <kbd>/</kbd>
-  </div>
-  <span class="header-count">{{ resultCount }}</span>
-  <div class="header-actions">
-    <button class="btn" @click="$emit('show-help')" title="Keyboard shortcuts (?)">
-      <i class="pi pi-question-circle"></i>
-    </button>
-    <button class="btn" @click="$emit('show-settings')" title="Settings (Ctrl+,)">
-      <i class="pi pi-cog"></i>
-    </button>
-    <button class="btn btn-accent" @click="exportWordlist">
-      <i class="pi pi-download"></i> Wordlist
-    </button>
+  <div class="flex items-center justify-between w-full px-4 py-2 border-b border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900">
+    <div class="flex items-center gap-4">
+      <span class="text-lg font-semibold text-primary">&#9670; Param Inventory</span>
+      
+      <div class="flex items-center gap-2 px-3 py-1 bg-surface-50 dark:bg-surface-800 rounded-md">
+        <i class="pi pi-search text-muted-color"></i>
+        <InputText 
+          ref="searchInput"
+          v-model="searchValue"
+          placeholder="Search params, endpoints, domains..."
+          class="!border-0 !bg-transparent !p-0 focus:!shadow-none"
+          @input="onSearchChange"
+        />
+        <kbd class="text-xs px-1 py-0.5 bg-surface-200 dark:bg-surface-600 rounded text-muted-color">/</kbd>
+      </div>
+      
+      <span class="text-sm text-muted-color">{{ resultCount }}</span>
+    </div>
+    
+    <div class="flex items-center gap-2">
+      <Button 
+        icon="pi pi-question-circle" 
+        variant="text" 
+        size="small"
+        @click="$emit('show-help')" 
+        v-tooltip="'Keyboard shortcuts (?)'"
+      />
+      <Button 
+        icon="pi pi-cog" 
+        variant="text" 
+        size="small"
+        @click="$emit('show-settings')" 
+        v-tooltip="'Settings (Ctrl+,)'"
+      />
+      <Button 
+        icon="pi pi-download" 
+        label="Wordlist"
+        size="small"
+        @click="exportWordlist"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import InputText from 'primevue/inputtext';
+import Button from 'primevue/button';
 import { useInventory } from '../../composables/useInventory';
 import { useBackend } from '../../composables/useBackend';
 
-const searchInput = ref<HTMLInputElement>();
+const searchInput = ref<InstanceType<typeof InputText>>();
+const searchValue = ref('');
 const { filters, parameters, filteredStats, setSearch } = useInventory();
 const { exportWordlist: exportWordlistFromBackend } = useBackend();
+
+// Sync search value with filters
+searchValue.value = filters.search;
 
 const emit = defineEmits<{
   'show-toast': [message: string, type?: 'success' | 'error' | 'info'];
@@ -52,9 +75,8 @@ const resultCount = computed(() => {
   return `${count} parameter${count !== 1 ? 's' : ''}`;
 });
 
-function onSearchChange(event: Event) {
-  const target = event.target as HTMLInputElement;
-  setSearch(target.value);
+function onSearchChange() {
+  setSearch(searchValue.value);
 }
 
 async function exportWordlist() {
@@ -85,11 +107,12 @@ async function exportWordlist() {
 function handleGlobalKeydown(e: KeyboardEvent) {
   if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') {
     e.preventDefault();
-    searchInput.value?.focus();
+    searchInput.value?.$el?.focus();
   }
   
-  if (e.key === 'Escape' && document.activeElement === searchInput.value) {
-    searchInput.value?.blur();
+  if (e.key === 'Escape' && document.activeElement === searchInput.value?.$el) {
+    searchInput.value?.$el?.blur();
+    searchValue.value = '';
     setSearch('');
   }
 }

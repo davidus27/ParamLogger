@@ -2,9 +2,8 @@
  * Simple test cases for the parser implementation
  */
 
-import { parseRequest } from './parser.js';
+import { RequestParser } from './parser.js';
 import type { Request, Body } from './caido-sdk-mock.js';
-import { DEFAULT_CONFIG } from '../../shared/dist/constants.js';
 
 // Mock Body implementation
 class MockBody implements Body {
@@ -51,6 +50,9 @@ class MockRequest implements Request {
 async function runTests() {
   console.log('🧪 Running parser tests...\n');
 
+  // Create parser instance
+  const parser = new RequestParser();
+
   // Test 1: Query parameters
   const queryRequest = new MockRequest(
     '1',
@@ -61,7 +63,7 @@ async function runTests() {
     { 'User-Agent': 'test-agent', 'Authorization': 'Bearer token123' }
   );
 
-  const queryResult = await parseRequest(queryRequest, DEFAULT_CONFIG);
+  const queryResult = parser.parseRequest(queryRequest);
   console.log('✅ Query test:', {
     domain: queryResult.domain,
     method: queryResult.method,
@@ -81,7 +83,7 @@ async function runTests() {
     {}
   );
 
-  const pathResult = await parseRequest(pathRequest, DEFAULT_CONFIG);
+  const pathResult = parser.parseRequest(pathRequest);
   console.log('✅ Path test:', {
     domain: pathResult.domain,
     pathParams: pathResult.parameters.filter(p => p.location === 'path')
@@ -115,7 +117,7 @@ async function runTests() {
     jsonBody
   );
 
-  const jsonResult = await parseRequest(jsonRequest, DEFAULT_CONFIG);
+  const jsonResult = parser.parseRequest(jsonRequest);
   console.log('✅ JSON test:', {
     domain: jsonResult.domain,
     jsonParams: jsonResult.parameters.filter(p => p.location === 'json').map(p => ({
@@ -143,7 +145,7 @@ async function runTests() {
     formBody
   );
 
-  const formResult = await parseRequest(formRequest, DEFAULT_CONFIG);
+  const formResult = parser.parseRequest(formRequest);
   console.log('✅ Form test:', {
     domain: formResult.domain,
     formParams: formResult.parameters.filter(p => p.location === 'form'),

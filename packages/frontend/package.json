@@ -10,9 +10,11 @@
   },
   "dependencies": {
     "@caido/primevue": "^0.3.3",
+    "@caido/tailwindcss": "^0.1.0",
     "@param-inventory/shared": "workspace:*",
     "primeicons": "^7.0.0",
     "primevue": "^4.0.0",
+    "tailwindcss-primeui": "^0.6.1",
     "vue": "^3.4.0"
   },
   "devDependencies": {

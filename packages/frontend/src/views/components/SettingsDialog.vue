@@ -1,99 +1,121 @@
 <template>
-  <div v-if="visible" class="drawer open" @click.self="close">
-    <div class="drawer-head">
-      <h3>Settings</h3>
-      <button class="btn btn-ghost btn-sm" @click="close">✕</button>
-    </div>
-    <div class="drawer-body">
-      <div class="settings-panel">
-        <div class="settings-section">
-          <h3><span>⚙</span> Layout</h3>
-          <div class="settings-row">
-            <span class="settings-label">Tree panel width (px)</span>
-            <div class="settings-control">
-              <input
-                class="number-input"
-                type="number"
-                :value="localSettings.treePanelWidth"
-                min="150"
-                max="500"
-                @input="localSettings.treePanelWidth = +($event.target as HTMLInputElement).value"
-              />
-            </div>
+  <Dialog 
+    v-model:visible="visible"
+    modal
+    :closable="true"
+    :draggable="false"
+    class="w-full max-w-lg"
+    @hide="close"
+  >
+    <template #header>
+      <div class="flex items-center gap-2">
+        <i class="pi pi-cog text-primary"></i>
+        <span class="font-semibold">Settings</span>
+      </div>
+    </template>
+    
+    <div class="space-y-6">
+      <!-- Layout Section -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 pb-2 border-b border-surface-200 dark:border-surface-700">
+          <i class="pi pi-layout text-primary"></i>
+          <h3 class="font-semibold text-surface-700 dark:text-surface-300">Layout</h3>
+        </div>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <label class="text-sm font-medium">Tree panel width (px)</label>
+            <InputNumber
+              v-model="localSettings.treePanelWidth"
+              :min="150"
+              :max="500"
+              :step="10"
+              showButtons
+              class="w-32"
+            />
           </div>
-          <div class="settings-row">
-            <span class="settings-label">Drawer width (px)</span>
-            <div class="settings-control">
-              <input
-                class="number-input"
-                type="number"
-                :value="localSettings.drawerWidth"
-                min="250"
-                max="800"
-                @input="localSettings.drawerWidth = +($event.target as HTMLInputElement).value"
-              />
-            </div>
+          <div class="flex items-center justify-between">
+            <label class="text-sm font-medium">Drawer width (px)</label>
+            <InputNumber
+              v-model="localSettings.drawerWidth"
+              :min="250"
+              :max="800"
+              :step="10"
+              showButtons
+              class="w-32"
+            />
           </div>
         </div>
+      </div>
 
-        <div class="settings-section">
-          <h3><span>🔄</span> Data</h3>
-          <div class="settings-row">
-            <span class="settings-label">Auto-refresh</span>
-            <div class="settings-control">
-              <div
-                class="toggle"
-                :class="{ on: localSettings.autoRefresh }"
-                @click="localSettings.autoRefresh = !localSettings.autoRefresh"
-              />
-            </div>
+      <!-- Data Section -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 pb-2 border-b border-surface-200 dark:border-surface-700">
+          <i class="pi pi-refresh text-primary"></i>
+          <h3 class="font-semibold text-surface-700 dark:text-surface-300">Data</h3>
+        </div>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <label class="text-sm font-medium">Auto-refresh</label>
+            <ToggleSwitch v-model="localSettings.autoRefresh" />
           </div>
-          <div class="settings-row">
-            <span class="settings-label">Refresh interval (ms)</span>
-            <div class="settings-control">
-              <input
-                class="number-input"
-                type="number"
-                :value="localSettings.refreshInterval"
-                min="1000"
-                max="60000"
-                step="1000"
-                @input="localSettings.refreshInterval = +($event.target as HTMLInputElement).value"
-              />
-            </div>
+          <div class="flex items-center justify-between">
+            <label class="text-sm font-medium">Refresh interval (ms)</label>
+            <InputNumber
+              v-model="localSettings.refreshInterval"
+              :min="1000"
+              :max="60000"
+              :step="1000"
+              showButtons
+              class="w-32"
+            />
           </div>
         </div>
+      </div>
 
-        <div class="settings-section">
-          <h3><span>🔒</span> Privacy</h3>
-          <div class="settings-row">
-            <span class="settings-label">Redaction mode</span>
-            <div class="settings-control">
-              <select
-                class="number-input"
-                style="width:120px"
-                :value="localSettings.defaultRedactionMode"
-                @change="localSettings.defaultRedactionMode = ($event.target as HTMLSelectElement).value as any"
-              >
-                <option value="full">Full</option>
-                <option value="partial">Partial</option>
-                <option value="hash">Hash</option>
-                <option value="length">Length only</option>
-              </select>
-            </div>
+      <!-- Privacy Section -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 pb-2 border-b border-surface-200 dark:border-surface-700">
+          <i class="pi pi-shield text-primary"></i>
+          <h3 class="font-semibold text-surface-700 dark:text-surface-300">Privacy</h3>
+        </div>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <label class="text-sm font-medium">Redaction mode</label>
+            <Select
+              v-model="localSettings.defaultRedactionMode"
+              :options="redactionOptions"
+              optionLabel="label"
+              optionValue="value"
+              class="w-32"
+            />
           </div>
         </div>
       </div>
     </div>
-    <div class="drawer-foot">
-      <button class="btn btn-accent" @click="save">Save</button>
-      <button class="btn" @click="close">Cancel</button>
-    </div>
-  </div>
+    
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <Button 
+          label="Cancel" 
+          variant="text"
+          @click="close"
+        />
+        <Button 
+          label="Save" 
+          @click="save"
+        />
+      </div>
+    </template>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue';
+import Dialog from 'primevue/dialog';
+import Button from 'primevue/button';
+import InputNumber from 'primevue/inputnumber';
+import ToggleSwitch from 'primevue/toggleswitch';
+import Select from 'primevue/select';
 import type { FrontendSettings } from '@param-inventory/shared';
 
 const props = defineProps<{
@@ -114,6 +136,13 @@ const localSettings = reactive<FrontendSettings>({
   refreshInterval: 5000,
   defaultRedactionMode: 'partial',
 });
+
+const redactionOptions = [
+  { label: 'Full', value: 'full' },
+  { label: 'Partial', value: 'partial' },
+  { label: 'Hash', value: 'hash' },
+  { label: 'Length only', value: 'length' }
+];
 
 watch(
   () => props.settings,

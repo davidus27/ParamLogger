@@ -1,40 +1,47 @@
 <template>
-  <div class="filter-bar">
-    <!-- Location filter pills -->
-    <span class="label">Location</span>
-    <span 
-      v-for="location in locations" 
-      :key="location"
-      :class="['pill', { 'on': isLocationActive(location) }]"
-      :data-loc="location.toLowerCase()"
-      @click="toggleLocation(location)"
-    >
-      {{ location }}
-    </span>
+  <div class="flex items-center gap-4 px-4 py-2 border-b border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800">
+    <!-- Location filter chips -->
+    <div class="flex items-center gap-2">
+      <span class="text-sm font-medium text-surface-700 dark:text-surface-300">Location</span>
+      <div class="flex gap-1">
+        <Chip 
+          v-for="location in locations" 
+          :key="location"
+          :label="location"
+          :class="{ '!bg-primary !text-primary-contrast': isLocationActive(location) }"
+          class="cursor-pointer text-xs"
+          @click="toggleLocation(location)"
+        />
+      </div>
+    </div>
     
-    <span class="filter-sep"></span>
+    <Divider layout="vertical" class="!h-6" />
     
     <!-- Flag toggles -->
-    <span class="label">Show</span>
-    <span 
-      :class="['pill', { 'on': filters.showInteresting }]"
-      data-flag="interesting"
-      @click="toggleFlag('showInteresting')"
-    >
-      Interesting only
-    </span>
-    <span 
-      :class="['pill', { 'on': filters.showNew }]"
-      data-flag="new"
-      @click="toggleFlag('showNew')"
-    >
-      New only
-    </span>
+    <div class="flex items-center gap-2">
+      <span class="text-sm font-medium text-surface-700 dark:text-surface-300">Show</span>
+      <div class="flex gap-1">
+        <Chip 
+          label="Interesting only"
+          :class="{ '!bg-primary !text-primary-contrast': filters.showInteresting }"
+          class="cursor-pointer text-xs"
+          @click="toggleFlag('showInteresting')"
+        />
+        <Chip 
+          label="New only"
+          :class="{ '!bg-primary !text-primary-contrast': filters.showNew }"
+          class="cursor-pointer text-xs"
+          @click="toggleFlag('showNew')"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import Chip from 'primevue/chip';
+import Divider from 'primevue/divider';
 import { useInventory } from '../../composables/useInventory';
 import { ParameterLocation } from '@param-inventory/shared';
 
