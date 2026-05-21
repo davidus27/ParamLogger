@@ -233,6 +233,23 @@
   border-color: var(--c-border-default);
 }
 
+.inv-btn-primary {
+  background: var(--c-bg-primary);
+  border-color: var(--c-bg-primary);
+  color: var(--c-fg-onEmphasis);
+  font-weight: 600;
+}
+
+.inv-btn-primary:hover {
+  background: var(--c-bg-primary-hover);
+  border-color: var(--c-bg-primary-hover);
+}
+
+.inv-btn-primary:active {
+  background: var(--c-bg-primary);
+  border-color: var(--c-bg-primary);
+}
+
 /* ───── Tree panel ───── */
 .inv-tree-panel {
   background: var(--c-bg-subtle);
@@ -742,10 +759,18 @@ thead th {
   font-weight: 700;
   margin: 0;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  word-break: break-all;
   color: var(--c-fg-default);
   flex: 1;
   margin-right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.drawer-head h3 .drawer-title {
+  word-break: break-all;
+  min-width: 0;
 }
 
 .drawer-body {
@@ -795,6 +820,43 @@ thead th {
 .d-row .v.mono {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11.5px;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.d-row .v.mono .endpoint-path-text {
+  word-break: break-all;
+  min-width: 0;
+}
+
+.d-copy {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--c-fg-muted);
+  cursor: pointer;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 20px;
+  line-height: 1;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color 80ms ease, background 80ms ease, border-color 80ms ease;
+}
+
+.d-copy:hover {
+  color: var(--c-fg-default);
+  background: var(--c-bg-elevated);
+  border-color: var(--c-border-default);
+}
+
+.d-copy:active {
+  background: var(--c-bg-subtle);
 }
 
 .drawer-foot {
@@ -804,6 +866,15 @@ thead th {
   display: flex;
   gap: 8px;
   background: var(--c-bg-elevated);
+}
+
+.drawer-foot .inv-btn {
+  flex: 1;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
 }
 
 /* ───── Scrollbars ───── */

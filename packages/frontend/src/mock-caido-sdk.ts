@@ -241,7 +241,20 @@ export const mockCaido: Caido<InventoryBackendAPI, InventoryBackendEvents> = {
   commandPalette: {} as any,
   replay: {} as any,
   search: {} as any,
-  httpHistory: {} as any,
+  httpHistory: {
+    setQuery: (query: any) => {
+      console.log('Mock: httpHistory.setQuery', query);
+    },
+    getQuery: () => '' as any,
+    getScopeId: () => undefined,
+    setScope: async () => {},
+    addRequestEditorExtension: () => {},
+    addResponseEditorExtension: () => {},
+    addRequestViewMode: () => {},
+    addResponseViewMode: () => {},
+    scrollTo: () => {},
+    addToSlot: (() => {}) as any,
+  } as any,
   automate: {} as any,
   files: {} as any,
   filters: {} as any,

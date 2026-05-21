@@ -173,7 +173,14 @@
     <!-- ───── Detail drawer ───── -->
     <aside class="inv-drawer" :class="{ open: !!selectedParam }">
       <div v-if="selectedParam" class="drawer-head">
-        <h3>{{ selectedParam.name }}</h3>
+        <h3>
+          <span class="drawer-title">{{ selectedParam.name }}</span>
+          <button
+            class="d-copy"
+            title="Copy parameter name"
+            @click="copyText(selectedParam.name)"
+          >⎘</button>
+        </h3>
         <button class="inv-btn inv-btn-ghost" @click="closeDrawer">✕</button>
       </div>
 
@@ -190,7 +197,12 @@
             <span class="k">Endpoint</span>
             <span class="v mono">
               <span class="method-badge" :class="`m-${selectedParam.method}`">{{ selectedParam.method }}</span>
-              {{ selectedParam.normalizedPath }}
+              <span class="endpoint-path-text">{{ selectedParam.normalizedPath }}</span>
+              <button
+                class="d-copy"
+                title="Copy endpoint"
+                @click="copyText(`${selectedParam.method} ${selectedParam.domain}${selectedParam.normalizedPath}`)"
+              >⎘</button>
             </span>
           </div>
           <div class="d-row">
@@ -228,9 +240,12 @@
       </div>
 
       <div v-if="selectedParam" class="drawer-foot">
-        <button class="inv-btn" @click="copyText(selectedParam.name)">⎘ Copy name</button>
-        <button class="inv-btn" @click="copyText(`${selectedParam.method} ${selectedParam.domain}${selectedParam.normalizedPath}`)">
-          ⎘ Copy endpoint
+        <button
+          class="inv-btn inv-btn-primary"
+          title="Open HTTP History filtered to requests containing this parameter"
+          @click="openInHttpHistory(selectedParam)"
+        >
+          ⇱ View in HTTP History
         </button>
       </div>
     </aside>
@@ -240,7 +255,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted, inject, shallowRef } from 'vue';
 import { RecycleScroller } from 'vue-virtual-scroller';
-import type { Caido } from '@caido/sdk-frontend';
+import type { Caido, HTTPQL } from '@caido/sdk-frontend';
 import type {
   InventoryBackendAPI,
   InventoryBackendEvents,
@@ -397,6 +412,53 @@ function copyText(txt: string): void {
 function exportWordlist(): void {
   const names = [...new Set(filteredParameters.value.map((p) => p.name))].join('\n');
   copyText(names);
+}
+
+// Build an HTTPQL query that scopes HTTP History to requests carrying this parameter.
+function buildHttpQLForParameter(p: Parameter): string {
+  const escape = (s: string): string => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const parts: string[] = [];
+
+  parts.push(`req.host.eq:"${escape(p.domain)}"`);
+  parts.push(`req.method.eq:"${escape(p.method)}"`);
+
+  // Static path prefix only (drop placeholders like {id} so the filter still matches).
+  const staticPath = p.normalizedPath.split('{')[0].replace(/\/+$/, '');
+  if (staticPath) {
+    parts.push(`req.path.cont:"${escape(staticPath)}"`);
+  }
+
+  switch (p.location) {
+    case ParameterLocation.QUERY:
+      parts.push(`req.query.cont:"${escape(p.name)}="`);
+      break;
+    case ParameterLocation.JSON:
+    case ParameterLocation.FORM:
+    case ParameterLocation.MULTIPART:
+      parts.push(`req.body.cont:"${escape(p.name)}"`);
+      break;
+    case ParameterLocation.HEADER:
+      parts.push(`req.raw.cont:"${escape(p.name)}:"`);
+      break;
+    case ParameterLocation.COOKIE:
+      parts.push(`req.raw.cont:"${escape(p.name)}="`);
+      break;
+    case ParameterLocation.PATH:
+      // Already constrained by host/method/path prefix above.
+      break;
+  }
+
+  return parts.join(' AND ');
+}
+
+function openInHttpHistory(p: Parameter): void {
+  const query = buildHttpQLForParameter(p);
+  try {
+    caido?.httpHistory?.setQuery?.(query as HTTPQL);
+    caido?.navigation?.goTo?.({ id: 'HTTPHistory' });
+  } catch (error) {
+    console.error('Failed to open HTTP History with query:', query, error);
+  }
 }
 
 function formatDate(d: Date | string): string {
