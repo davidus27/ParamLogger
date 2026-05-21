@@ -15,7 +15,7 @@ const MOCK_PARAMETERS: Parameter[] = [
     firstSeen: new Date('2026-04-01'), lastSeen: new Date() },
   { id: 'a2', domain: 'auth.example.com', method: 'POST', normalizedPath: '/oauth/authorize',
     location: ParameterLocation.QUERY, name: 'response_type',
-    valueTypes: [ValueType.STRING], flags: [], count: 89,
+    valueTypes: [ValueType.STRING], flag  s: [], count: 89,
     firstSeen: new Date('2026-04-01'), lastSeen: new Date() },
   { id: 'a3', domain: 'auth.example.com', method: 'POST', normalizedPath: '/oauth/authorize',
     location: ParameterLocation.QUERY, name: 'client_id',

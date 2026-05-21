@@ -111,8 +111,12 @@ export function useInventory() {
     state.isLoading = loading;
   }
 
-  // Memoized tree computation using domain index
+  // Memoized tree computation. We depend on the reactive parametersRef so
+  // Vue re-evaluates this whenever the inventory changes; `domainIndex` itself
+  // is a plain Map and isn't tracked by reactivity.
   const tree = computed(() => {
+    const params = parametersRef.value;
+
     const result: Array<{
       name: string;
       paramCount: number;
@@ -123,20 +127,36 @@ export function useInventory() {
       }>;
     }> = [];
 
-    for (const [domainName, endpointMap] of domainIndex) {
-      const endpoints = Array.from(endpointMap.entries()).map(([endpointKey, params]) => {
+    const domainMap = new Map<string, Map<string, Parameter[]>>();
+    for (const param of params) {
+      let endpointMap = domainMap.get(param.domain);
+      if (!endpointMap) {
+        endpointMap = new Map();
+        domainMap.set(param.domain, endpointMap);
+      }
+      const endpointKey = `${param.method} ${param.normalizedPath}`;
+      let bucket = endpointMap.get(endpointKey);
+      if (!bucket) {
+        bucket = [];
+        endpointMap.set(endpointKey, bucket);
+      }
+      bucket.push(param);
+    }
+
+    for (const [domainName, endpointMap] of domainMap) {
+      const endpoints = Array.from(endpointMap.entries()).map(([endpointKey, ps]) => {
         const [method, path] = endpointKey.split(' ', 2);
         return {
           method,
           path,
-          params: [...params] // Create shallow copy
+          params: ps,
         };
       }).sort((a, b) => (a.path + a.method).localeCompare(b.path + b.method));
 
       result.push({
         name: domainName,
         paramCount: endpoints.reduce((sum, ep) => sum + ep.params.length, 0),
-        endpoints
+        endpoints,
       });
     }
 
