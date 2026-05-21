@@ -537,10 +537,14 @@ thead th {
 }
 
 .row-num {
+  padding-left: 8px;
+  padding-right: 8px;
   text-align: center;
   color: var(--c-fg-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .param-name {

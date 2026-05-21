@@ -107,7 +107,7 @@
           <table class="table-header">
             <thead>
               <tr>
-                <th style="width:32px"></th>
+                <th :style="{ width: rowNumWidth + 'px' }"></th>
                 <th>Parameter</th>
                 <th>Location</th>
                 <th>Endpoint</th>
@@ -131,7 +131,7 @@
                 :class="{ selected: selectedParam && selectedParam.id === p.id }"
                 @click="openDrawer(p)"
               >
-                <div class="table-cell row-num" style="width:32px">{{ i + 1 }}</div>
+                <div class="table-cell row-num" :style="{ width: rowNumWidth + 'px' }">{{ i + 1 }}</div>
                 <div class="table-cell"><span class="param-name">{{ p.name }}</span></div>
                 <div class="table-cell"><span class="loc" :class="`loc-${p.location}`">{{ p.location }}</span></div>
                 <div class="table-cell endpoint-cell">
@@ -324,6 +324,12 @@ const filteredTree = computed(() => {
   }
   
   return result;
+});
+
+const rowNumWidth = computed(() => {
+  const digits = String(Math.max(1, filteredParameters.value.length)).length;
+  // ~8px per digit (tabular-nums @ 11px) + 16px total horizontal padding, min 32px.
+  return Math.max(32, digits * 8 + 16);
 });
 
 const resultCountLabel = computed(() => {
