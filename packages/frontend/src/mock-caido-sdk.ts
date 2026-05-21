@@ -3,31 +3,53 @@
  */
 
 import type { Caido } from '@caido/sdk-frontend';
-import type { InventoryBackendAPI, InventoryBackendEvents, Parameter, Domain, InventoryStats, Observation } from '@param-inventory/shared';
-import { ParameterLocation, ValueType } from '@param-inventory/shared';
+import type { InventoryBackendAPI, InventoryBackendEvents, Parameter, Domain, InventoryStats } from '@param-inventory/shared';
+import { ParameterLocation, ValueType, Flag } from '@param-inventory/shared';
 
 // Mock implementations of the backend API methods
 const mockBackendAPI: InventoryBackendAPI = {
   async getInventory(filters) {
     console.log('Mock: getInventory called with filters:', filters);
-    // Return some mock parameters
+    // Return some mock parameters with the new minimal Parameter interface
     return [
       {
         id: '1',
         domain: 'example.com',
         method: 'POST',
-        path: '/api/login',
         normalizedPath: '/api/login',
         location: ParameterLocation.JSON,
         name: 'username',
         valueTypes: [ValueType.STRING],
-        dynamicConfidence: 0.8,
-        flags: [],
+        flags: [Flag.SENSITIVE],
         count: 5,
         firstSeen: new Date('2023-01-01'),
-        lastSeen: new Date(),
-        redactedExamples: ['user***'],
-        exampleRequestIds: ['req1', 'req2']
+        lastSeen: new Date()
+      },
+      {
+        id: '2',
+        domain: 'api.example.com',
+        method: 'GET',
+        normalizedPath: '/users/{id}',
+        location: ParameterLocation.QUERY,
+        name: 'token',
+        valueTypes: [ValueType.JWT],
+        flags: [Flag.AUTH, Flag.SENSITIVE],
+        count: 12,
+        firstSeen: new Date('2023-01-15'),
+        lastSeen: new Date()
+      },
+      {
+        id: '3',
+        domain: 'example.com',
+        method: 'POST',
+        normalizedPath: '/upload',
+        location: ParameterLocation.MULTIPART,
+        name: 'file',
+        valueTypes: [ValueType.STRING],
+        flags: [Flag.FILE, Flag.NEW],
+        count: 1,
+        firstSeen: new Date(),
+        lastSeen: new Date()
       }
     ] as Parameter[];
   },
@@ -37,45 +59,22 @@ const mockBackendAPI: InventoryBackendAPI = {
     return [
       {
         name: 'example.com',
-        endpoints: [],
-        totalParams: 10,
-        lastSeen: new Date()
+        count: 25
+      },
+      {
+        name: 'api.example.com',
+        count: 15
       }
     ] as Domain[];
-  },
-
-  async getParameterDetail(parameterId) {
-    console.log('Mock: getParameterDetail called with:', parameterId);
-    return null;
-  },
-
-  async getParameterObservations(parameterId, limit) {
-    console.log('Mock: getParameterObservations called with:', parameterId, limit);
-    return [] as Observation[];
   },
 
   async getStats() {
     console.log('Mock: getStats called');
     return {
       totalRequests: 100,
-      totalParams: 50,
       uniqueParams: 25,
-      domains: 5,
-      endpoints: 15
+      domains: 2
     } as InventoryStats;
-  },
-
-  async exportWordlist(filters) {
-    console.log('Mock: exportWordlist called with filters:', filters);
-    return ['param1', 'param2', 'param3'];
-  },
-
-  async clearInventory() {
-    console.log('Mock: clearInventory called');
-  },
-
-  async triggerHistoricalScan() {
-    console.log('Mock: triggerHistoricalScan called');
   }
 };
 
