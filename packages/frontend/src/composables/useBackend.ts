@@ -11,7 +11,7 @@ const connectionStatus = reactive({
 });
 
 export function useBackend() {
-  const { updateParameters, updateDomains, updateStats } = useInventory();
+  const { updateParameters, updateDomains, updateStats, upsertParameters } = useInventory();
 
   function init(caidoInstance: Caido<InventoryBackendAPI, InventoryBackendEvents>) {
     caido = caidoInstance;
@@ -23,8 +23,8 @@ export function useBackend() {
   function setupEventSubscriptions() {
     if (!caido) return;
 
-    caido.backend.onEvent('inventory-updated', (_parameter: Parameter) => {
-      refreshInventory();
+    caido.backend.onEvent('inventory-batch', (parameters: Parameter[]) => {
+      upsertParameters(parameters);
     });
 
     caido.backend.onEvent('stats-updated', (stats: InventoryStats) => {

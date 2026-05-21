@@ -1,9 +1,14 @@
-import { reactive, readonly, computed, ref } from 'vue';
+import { reactive, readonly, computed, ref, shallowRef } from 'vue';
 import type { Parameter, Domain, InventoryStats } from '@param-inventory/shared';
 
+// Internal storage: Map for fast lookups and updates
+const parametersMap = new Map<string, Parameter>();
+const domainIndex = new Map<string, Map<string, Parameter[]>>();
+
+// Reactive state with shallow refs for performance
+const parametersRef = shallowRef<Parameter[]>([]);
+const domainsRef = shallowRef<Domain[]>([]);
 const state = reactive({
-  parameters: [] as Parameter[],
-  domains: [] as Domain[],
   stats: {
     totalRequests: 0,
     totalParams: 0,
@@ -14,31 +19,140 @@ const state = reactive({
   isLoading: false
 });
 
+function updateDomainIndex(parameter: Parameter) {
+  if (!domainIndex.has(parameter.domain)) {
+    domainIndex.set(parameter.domain, new Map());
+  }
+  const endpointMap = domainIndex.get(parameter.domain)!;
+  const endpointKey = `${parameter.method} ${parameter.normalizedPath}`;
+  
+  if (!endpointMap.has(endpointKey)) {
+    endpointMap.set(endpointKey, []);
+  }
+  
+  const endpointParams = endpointMap.get(endpointKey)!;
+  const existingIndex = endpointParams.findIndex(p => p.id === parameter.id);
+  
+  if (existingIndex >= 0) {
+    endpointParams[existingIndex] = parameter;
+  } else {
+    endpointParams.push(parameter);
+  }
+}
+
+function removeDomainIndex(parameter: Parameter) {
+  if (!domainIndex.has(parameter.domain)) return;
+  
+  const endpointMap = domainIndex.get(parameter.domain)!;
+  const endpointKey = `${parameter.method} ${parameter.normalizedPath}`;
+  
+  if (!endpointMap.has(endpointKey)) return;
+  
+  const endpointParams = endpointMap.get(endpointKey)!;
+  const paramIndex = endpointParams.findIndex(p => p.id === parameter.id);
+  
+  if (paramIndex >= 0) {
+    endpointParams.splice(paramIndex, 1);
+    
+    // Clean up empty endpoint
+    if (endpointParams.length === 0) {
+      endpointMap.delete(endpointKey);
+      
+      // Clean up empty domain
+      if (endpointMap.size === 0) {
+        domainIndex.delete(parameter.domain);
+      }
+    }
+  }
+}
+
 export function useInventory() {
   function updateParameters(newParams: Parameter[]) {
-    state.parameters = newParams;
+    // Clear existing data
+    parametersMap.clear();
+    domainIndex.clear();
+    
+    // Populate new data
+    for (const param of newParams) {
+      parametersMap.set(param.id, param);
+      updateDomainIndex(param);
+    }
+    
+    // Update reactive ref with frozen array
+    parametersRef.value = Object.freeze(Array.from(parametersMap.values()));
+  }
+
+  function upsertParameters(batch: Parameter[]) {
+    for (const param of batch) {
+      // Remove old index entry if parameter already exists
+      const existing = parametersMap.get(param.id);
+      if (existing) {
+        removeDomainIndex(existing);
+      }
+      
+      // Add/update parameter
+      parametersMap.set(param.id, param);
+      updateDomainIndex(param);
+    }
+    
+    // Update reactive ref with frozen array
+    parametersRef.value = Object.freeze(Array.from(parametersMap.values()));
   }
 
   function updateDomains(newDomains: Domain[]) {
-    state.domains = newDomains;
+    domainsRef.value = Object.freeze([...newDomains]);
   }
 
   function updateStats(newStats: InventoryStats) {
-    state.stats = newStats;
+    Object.assign(state.stats, newStats);
   }
 
   function setLoading(loading: boolean) {
     state.isLoading = loading;
   }
 
+  // Memoized tree computation using domain index
+  const tree = computed(() => {
+    const result: Array<{
+      name: string;
+      paramCount: number;
+      endpoints: Array<{
+        method: string;
+        path: string;
+        params: Parameter[];
+      }>;
+    }> = [];
+
+    for (const [domainName, endpointMap] of domainIndex) {
+      const endpoints = Array.from(endpointMap.entries()).map(([endpointKey, params]) => {
+        const [method, path] = endpointKey.split(' ', 2);
+        return {
+          method,
+          path,
+          params: [...params] // Create shallow copy
+        };
+      }).sort((a, b) => (a.path + a.method).localeCompare(b.path + b.method));
+
+      result.push({
+        name: domainName,
+        paramCount: endpoints.reduce((sum, ep) => sum + ep.params.length, 0),
+        endpoints
+      });
+    }
+
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  });
+
   return {
-    parameters: computed(() => state.parameters),
-    domains: computed(() => state.domains),
+    parameters: computed(() => parametersRef.value),
+    domains: computed(() => domainsRef.value),
     stats: readonly(state.stats),
     isLoading: computed(() => state.isLoading),
+    tree, // Expose memoized tree
     updateParameters,
     updateDomains,
     updateStats,
     setLoading,
+    upsertParameters, // New method for incremental updates
   };
 }

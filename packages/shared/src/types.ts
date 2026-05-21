@@ -72,7 +72,7 @@ export interface InventoryFilters {
 
 // Events sent from backend to frontend
 export type InventoryBackendEvents = {
-  'inventory-updated': (parameter: Parameter) => void;
+  'inventory-batch': (parameters: Parameter[]) => void;
   'stats-updated': (stats: InventoryStats) => void;
   'scan-started': (data: { total: number }) => void;
   'scan-completed': (data: { 

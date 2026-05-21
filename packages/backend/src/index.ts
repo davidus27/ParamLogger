@@ -29,6 +29,12 @@ const parameters = new Map<string, Parameter>();
 const domains = new Map<string, number>();
 let totalRequests = 0;
 
+// Coalescing state for batched events
+const pendingParameterIds = new Set<string>();
+let pendingStatsChange = false;
+let flushTimer: NodeJS.Timeout | null = null;
+let lastStats = { totalRequests: 0, uniqueParams: 0, domains: 0 };
+
 /**
  * Initialize the parameter inventory plugin
  */
@@ -36,6 +42,7 @@ export function init(sdk: Caido): void {
   console.log(`[param-inventory] init() — ${BUILD_TAG}`);
 
   registerRpc(sdk);
+  setupEventCoalescing(sdk);
 
   sdk.events.onInterceptRequest((_s, req) => {
     ingest(sdk, req);
@@ -45,12 +52,71 @@ export function init(sdk: Caido): void {
 }
 
 /**
+ * Set up event coalescing with flush timer
+ */
+function setupEventCoalescing(sdk: Caido): void {
+  const flushEvents = () => {
+    flushTimer = null;
+
+    // Send batched parameter updates
+    if (pendingParameterIds.size > 0) {
+      const batchParameters: Parameter[] = [];
+      for (const id of pendingParameterIds) {
+        const param = parameters.get(id);
+        if (param) {
+          batchParameters.push(param);
+        }
+      }
+      
+      if (batchParameters.length > 0) {
+        sdk.api.send('inventory-batch', batchParameters);
+      }
+      pendingParameterIds.clear();
+    }
+
+    // Send stats update if changed
+    if (pendingStatsChange) {
+      const currentStats = {
+        totalRequests,
+        uniqueParams: parameters.size,
+        domains: domains.size,
+      };
+
+      // Only send if stats actually changed
+      if (
+        currentStats.totalRequests !== lastStats.totalRequests ||
+        currentStats.uniqueParams !== lastStats.uniqueParams ||
+        currentStats.domains !== lastStats.domains
+      ) {
+        sdk.api.send('stats-updated', currentStats);
+        lastStats = { ...currentStats };
+      }
+      pendingStatsChange = false;
+    }
+  };
+
+  // Expose flush function for external use (e.g., scan completion)
+  (globalThis as any).__flushParameterEvents = flushEvents;
+}
+
+/**
+ * Schedule a flush if not already scheduled
+ */
+function scheduleFlush(): void {
+  if (flushTimer === null) {
+    flushTimer = setTimeout(() => {
+      const flush = (globalThis as any).__flushParameterEvents;
+      if (flush) flush();
+    }, 250);
+  }
+}
+
+/**
  * Ingest a request and update the parameter inventory
  */
 function ingest(sdk: Caido, request: Request): void {
   try {
     const parsedRequest = parseRequest(request);
-    const changedParameters: Parameter[] = [];
 
     totalRequests++;
 
@@ -74,9 +140,10 @@ function ingest(sdk: Caido, request: Request): void {
       const now = parsedRequest.timestamp;
       
       if (!parameter) {
-        // New parameter
+        // New parameter - compute static flags once
         const valueType = classifyValue(parsedParam.value);
-        const flags = computeFlags(parsedParam.name, parsedParam.value, now, valueType);
+        const staticFlags = computeStaticFlags(parsedParam.name, parsedParam.value, valueType);
+        const flags = recomputeNewFlag(staticFlags, now);
         
         parameter = {
           id,
@@ -93,7 +160,7 @@ function ingest(sdk: Caido, request: Request): void {
         };
         
         parameters.set(id, parameter);
-        changedParameters.push(parameter);
+        pendingParameterIds.add(id);
       } else {
         // Existing parameter - update it
         const valueType = classifyValue(parsedParam.value);
@@ -107,26 +174,20 @@ function ingest(sdk: Caido, request: Request): void {
           parameter.valueTypes.push(valueType);
         }
         
-        // Recompute flags (may have lost NEW flag)
-        parameter.flags = computeFlags(parsedParam.name, parsedParam.value, parameter.firstSeen, valueType);
+        // Only recompute NEW flag (static flags don't change)
+        parameter.flags = recomputeNewFlag(parameter.flags, parameter.firstSeen);
         
         if (wasChanged || parameter.count % 10 === 0) {
-          changedParameters.push(parameter);
+          pendingParameterIds.add(id);
         }
       }
     }
     
-    // Emit events for changed parameters
-    for (const param of changedParameters) {
-      sdk.api.send('inventory-updated', param);
-    }
+    // Mark stats as needing update
+    pendingStatsChange = true;
     
-    // Emit stats update
-    sdk.api.send('stats-updated', {
-      totalRequests,
-      uniqueParams: parameters.size,
-      domains: domains.size,
-    });
+    // Schedule coalesced flush
+    scheduleFlush();
     
   } catch (error) {
     console.error("Error ingesting request:", error);
@@ -190,16 +251,10 @@ function classifyValue(value: string): ValueType {
 }
 
 /**
- * Compute flags for a parameter
+ * Compute static flags for a parameter (run once when parameter is created)
  */
-function computeFlags(name: string, value: string, firstSeen: Date, valueType: ValueType): Flag[] {
+function computeStaticFlags(name: string, value: string, valueType: ValueType): Flag[] {
   const flags: Flag[] = [];
-  
-  // NEW flag - if first seen within threshold
-  const age = Date.now() - firstSeen.getTime();
-  if (age < NEW_PARAMETER_THRESHOLD_MS) {
-    flags.push(Flag.NEW);
-  }
   
   // Name-based flags
   if (SENSITIVE_NAME_PATTERNS.some(pattern => pattern.test(name))) {
@@ -229,6 +284,22 @@ function computeFlags(name: string, value: string, firstSeen: Date, valueType: V
 }
 
 /**
+ * Recompute only the NEW flag for an existing parameter
+ */
+function recomputeNewFlag(flags: Flag[], firstSeen: Date): Flag[] {
+  // Remove existing NEW flag
+  const filteredFlags = flags.filter(flag => flag !== Flag.NEW);
+  
+  // Add NEW flag if first seen within threshold
+  const age = Date.now() - firstSeen.getTime();
+  if (age < NEW_PARAMETER_THRESHOLD_MS) {
+    filteredFlags.push(Flag.NEW);
+  }
+  
+  return filteredFlags;
+}
+
+/**
  * Run historical scan of existing requests
  */
 async function runHistoricalScan(sdk: Caido): Promise<void> {
@@ -240,8 +311,8 @@ async function runHistoricalScan(sdk: Caido): Promise<void> {
   try {
     sdk.api.send('scan-started', { total: 0 });
     
-    // Page through requests using cursor-based pagination
-    const batchSize = 100;
+    // Page through requests using cursor-based pagination - smaller batch size for better responsiveness
+    const batchSize = 50;
     let hasMore = true;
     let cursor: string | null = null;
     
@@ -270,6 +341,9 @@ async function runHistoricalScan(sdk: Caido): Promise<void> {
         }
       }
       
+      // Yield event loop between batches to keep Caido responsive
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      
       // Check for next page
       const pageInfo = connection.pageInfo;
       if (pageInfo && pageInfo.hasNextPage && pageInfo.endCursor) {
@@ -278,6 +352,10 @@ async function runHistoricalScan(sdk: Caido): Promise<void> {
         hasMore = false;
       }
     }
+    
+    // Force flush any pending events before completion
+    const flush = (globalThis as any).__flushParameterEvents;
+    if (flush) flush();
     
     const duration = Date.now() - startTime;
     console.log(
@@ -288,7 +366,7 @@ async function runHistoricalScan(sdk: Caido): Promise<void> {
     // Emit scan completed
     sdk.api.send('scan-completed', { processed: processedCount, duration });
     
-    // Final stats update
+    // Final stats update (direct send since scan is complete)
     sdk.api.send('stats-updated', {
       totalRequests,
       uniqueParams: parameters.size,

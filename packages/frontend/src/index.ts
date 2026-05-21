@@ -25,7 +25,10 @@ export function init(caido: Caido<InventoryBackendAPI, InventoryBackendEvents>):
 }
 
 if (import.meta.env.DEV) {
-  import('./mock-caido-sdk').then(({ mockCaido }) => {
+  import('./mock-caido-sdk').then(({ mockCaido, simulateBatchUpdate }) => {
+    // Expose testing functions globally
+    (window as any).simulateBatchUpdate = simulateBatchUpdate;
+    
     const mount = () => {
       const appElement = document.getElementById('app');
       if (appElement) {

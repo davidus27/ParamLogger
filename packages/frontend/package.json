@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@param-inventory/shared": "workspace:*",
-    "vue": "^3.4.0"
+    "vue": "^3.4.0",
+    "vue-virtual-scroller": "^2.0.1"
   },
   "devDependencies": {
     "@caido/sdk-frontend": "^0.56.2",
