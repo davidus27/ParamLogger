@@ -340,8 +340,8 @@ function ingest(sdk: Caido, request: Request): void {
 
       if (!parameter) {
         // New parameter - compute static flags once
-        const valueType = classifyValue(parsedParam.value);
-        const staticFlags = computeStaticFlags(parsedParam.name, parsedParam.value, valueType);
+        const valueTypes = classifyValue(parsedParam.value);
+        const staticFlags = computeStaticFlags(parsedParam.name, parsedParam.value, valueTypes);
         const flags = recomputeNewFlag(staticFlags, now);
 
         parameter = {
@@ -351,7 +351,7 @@ function ingest(sdk: Caido, request: Request): void {
           normalizedPath: parsedRequest.normalizedPath,
           location: parsedParam.location,
           name: parsedParam.name,
-          valueTypes: [valueType],
+          valueTypes,
           flags,
           count: keys.size,
           firstSeen: now,
@@ -362,7 +362,7 @@ function ingest(sdk: Caido, request: Request): void {
         pendingParameterIds.add(id);
       } else {
         // Existing parameter - update it
-        const valueType = classifyValue(parsedParam.value);
+        const newTypes = classifyValue(parsedParam.value);
         const previousCount = parameter.count;
 
         // Canonical: count is the number of distinct request keys carrying
@@ -371,9 +371,11 @@ function ingest(sdk: Caido, request: Request): void {
         parameter.count = keys.size;
         parameter.lastSeen = now;
 
-        // Add value type if not seen before
-        if (!parameter.valueTypes.includes(valueType)) {
-          parameter.valueTypes.push(valueType);
+        // Accumulate any value types not seen before
+        for (const t of newTypes) {
+          if (!parameter.valueTypes.includes(t)) {
+            parameter.valueTypes.push(t);
+          }
         }
 
         // Only recompute NEW flag (static flags don't change)
@@ -398,97 +400,162 @@ function ingest(sdk: Caido, request: Request): void {
   }
 }
 
+// ── UUID classification ───────────────────────────────────────────────────────
+//
+// Each pattern enforces the RFC 4122 variant bits ([89ab] in the 9th position)
+// alongside the version nibble, giving very strong structural guarantees with
+// negligible false-positive risk.
+
+/** Per-version UUID patterns (fully anchored, case-insensitive). */
+const UUID_VERSION_PATTERNS: Array<[ValueType, RegExp]> = [
+  [ValueType.UUID_V1, /^[0-9a-f]{8}-[0-9a-f]{4}-1[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i],
+  [ValueType.UUID_V3, /^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i],
+  [ValueType.UUID_V4, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i],
+  [ValueType.UUID_V5, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i],
+  [ValueType.UUID_V6, /^[0-9a-f]{8}-[0-9a-f]{4}-6[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i],
+  [ValueType.UUID_V7, /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i],
+  [ValueType.UUID_V8, /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i],
+];
+
 /**
- * Classify a parameter value into a ValueType
+ * Fallback: catches v2 (DCE Security) and any future drafts that carry the
+ * RFC 4122 variant but whose version nibble isn't in the list above.
  */
-function classifyValue(value: string): ValueType {
-  if (!value || value.length === 0) {
-    return ValueType.EMPTY;
+const UUID_GENERIC = /^[0-9a-f]{8}-[0-9a-f]{4}-[02][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Compound format: <standard-uuid>@<unix-timestamp in s/ms/µs>.
+ * The timestamp group is restricted to 10–16 digits to tightly exclude email
+ * addresses (letters after @) and other lookalikes.
+ */
+const UUID_COMPOUND_RE =
+  /^([0-9a-f]{8}-[0-9a-f]{4}-[1-9a-f][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})@(\d{10,16})$/i;
+
+/**
+ * Returns the UUID-related ValueType(s) for a value, or an empty array when
+ * the value is not UUID-shaped.
+ *
+ * Compound values such as `<uuid>@<timestamp>` return two entries: the version
+ * type (e.g. UUID_V7) and UUID_COMPOUND, so both characteristics are visible.
+ */
+function classifyUUID(value: string): ValueType[] {
+  // Compound format first (uuid@digits)
+  const compound = UUID_COMPOUND_RE.exec(value);
+  if (compound) {
+    const uuidPart = compound[1];
+    const matched = UUID_VERSION_PATTERNS.find(([, re]) => re.test(uuidPart));
+    const versionType = matched ? matched[0] : ValueType.UUID;
+    return [versionType, ValueType.UUID_COMPOUND];
   }
-  
+
+  // Bare UUID — try each version
+  for (const [type, re] of UUID_VERSION_PATTERNS) {
+    if (re.test(value)) return [type];
+  }
+
+  // Fallback: valid UUID structure but uncategorised version (v2, future drafts)
+  if (UUID_GENERIC.test(value)) return [ValueType.UUID];
+
+  return [];
+}
+
+/**
+ * Classify a parameter value into one or more ValueTypes.
+ * Returns an array so compound values (e.g. uuid_v7 + uuid_compound) can carry
+ * multiple labels.
+ */
+function classifyValue(value: string): ValueType[] {
+  if (!value || value.length === 0) {
+    return [ValueType.EMPTY];
+  }
+
   // Boolean
   if (value.toLowerCase() === 'true' || value.toLowerCase() === 'false') {
-    return ValueType.BOOLEAN;
+    return [ValueType.BOOLEAN];
   }
-  
+
   // Integer
   if (/^\d+$/.test(value)) {
-    return ValueType.INTEGER;
+    return [ValueType.INTEGER];
   }
-  
+
   // Decimal
   if (/^\d+\.\d+$/.test(value)) {
-    return ValueType.DECIMAL;
+    return [ValueType.DECIMAL];
   }
-  
-  // UUID
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
-    return ValueType.UUID;
-  }
-  
+
+  // UUID (version-aware, with compound support) — check before EMAIL because
+  // the compound format uuid@digits would otherwise partially match the email
+  // regex (which only requires letters/digits on both sides of @).
+  const uuidTypes = classifyUUID(value);
+  if (uuidTypes.length > 0) return uuidTypes;
+
   // JWT (three base64url parts separated by dots).
   // Require total length >= 50 and a signature segment >= 20 chars to avoid
   // matching short domain-like values such as "www.firmy.cz".
   if (value.length >= 50) {
     const jwtMatch = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.([A-Za-z0-9_-]{20,})$/.exec(value);
     if (jwtMatch) {
-      return ValueType.JWT;
+      return [ValueType.JWT];
     }
   }
-  
+
   // Email
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-    return ValueType.EMAIL;
+    return [ValueType.EMAIL];
   }
-  
+
   // URL
   if (/^https?:\/\//.test(value)) {
-    return ValueType.URL;
+    return [ValueType.URL];
   }
-  
+
   // Hash (long hex string)
   if (/^[a-f0-9]{16,}$/i.test(value)) {
-    return ValueType.HASH;
+    return [ValueType.HASH];
   }
-  
+
   // Base64 (at least 8 chars, valid base64 chars, proper padding)
   if (value.length >= 8 && /^[A-Za-z0-9+/]+={0,2}$/.test(value) && value.length % 4 === 0) {
-    return ValueType.BASE64;
+    return [ValueType.BASE64];
   }
-  
-  return ValueType.STRING;
+
+  return [ValueType.STRING];
 }
 
 /**
  * Compute static flags for a parameter (run once when parameter is created)
  */
-function computeStaticFlags(name: string, value: string, valueType: ValueType): Flag[] {
+function computeStaticFlags(name: string, value: string, valueTypes: ValueType[]): Flag[] {
   const flags: Flag[] = [];
-  
+
   // Name-based flags
   if (SENSITIVE_NAME_PATTERNS.some(pattern => pattern.test(name))) {
     flags.push(Flag.SENSITIVE);
   }
-  
+
   if (REDIRECT_NAME_PATTERNS.some(pattern => pattern.test(name))) {
     flags.push(Flag.REDIRECT);
   }
-  
+
   if (FILE_NAME_PATTERNS.some(pattern => pattern.test(name))) {
     flags.push(Flag.FILE);
   }
-  
+
   if (AUTH_NAME_PATTERNS.some(pattern => pattern.test(name))) {
     flags.push(Flag.AUTH);
   }
-  
+
   // Value-based sensitive detection
-  if (valueType === ValueType.JWT || (valueType === ValueType.HASH && value.length > 20)) {
+  if (
+    valueTypes.includes(ValueType.JWT) ||
+    (valueTypes.includes(ValueType.HASH) && value.length > 20)
+  ) {
     if (!flags.includes(Flag.SENSITIVE)) {
       flags.push(Flag.SENSITIVE);
     }
   }
-  
+
   return flags;
 }
 

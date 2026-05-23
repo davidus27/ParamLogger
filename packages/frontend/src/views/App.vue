@@ -342,6 +342,9 @@
             <span class="hint-body">
               <strong>{{ hint.label }}</strong>
               <span class="hint-desc">{{ hint.desc }}</span>
+              <ul v-if="hint.payloads.length" class="hint-payloads">
+                <li v-for="p in hint.payloads" :key="p" class="hint-payload">{{ p }}</li>
+              </ul>
             </span>
           </div>
         </section>
@@ -410,7 +413,7 @@ import type {
   InventoryBackendEvents,
   Parameter,
 } from '@param-logger/shared';
-import { ParameterLocation, ValueType } from '@param-logger/shared';
+import { ParameterLocation, ValueType, Flag } from '@param-logger/shared';
 import { useInventory } from '../composables/useInventory';
 import { useBackend } from '../composables/useBackend';
 import { useScope } from '../composables/useScope';
@@ -464,7 +467,7 @@ const filteredParameters = computed<Parameter[]>(() => {
     // if any flags are selected, param must carry at least one of them
     if (activeFlags.size > 0 && !p.flags.some(f => activeFlags.has(f))) return false;
     // if any value types are selected, param must carry at least one of them
-    if (activeValueTypes.size > 0 && !p.valueTypes.some(t => activeValueTypes.has(t))) return false;
+    if (!matchesValueTypeFilter(p.valueTypes as ValueType[], activeValueTypes)) return false;
     if (q) {
       const hay = `${p.name} ${p.normalizedPath} ${p.domain} ${p.valueTypes.join(' ')} ${p.flags.join(' ')}`.toLowerCase();
       if (!hay.includes(q)) return false;
@@ -605,6 +608,28 @@ function toggleValueType(valueType: ValueType): void {
   } else {
     activeValueTypes.add(valueType);
   }
+}
+
+/** Returns true when a ValueType is any UUID variant (generic or versioned). */
+function isUUIDValueType(t: ValueType): boolean {
+  return t === ValueType.UUID || (t as string).startsWith('uuid_');
+}
+
+/**
+ * Checks whether the parameter's value types satisfy the active filter set.
+ * The generic UUID filter pill matches all versioned UUID types so users don't
+ * have to toggle each variant individually.
+ */
+function matchesValueTypeFilter(paramTypes: ValueType[], active: Set<ValueType>): boolean {
+  if (active.size === 0) return true;
+  for (const activeType of active) {
+    if (activeType === ValueType.UUID) {
+      if (paramTypes.some(isUUIDValueType)) return true;
+    } else {
+      if (paramTypes.includes(activeType)) return true;
+    }
+  }
+  return false;
 }
 
 function selectScope(scope: typeof selectedScope.value): void {
@@ -840,6 +865,7 @@ interface AttackHint {
   icon: string;
   label: string;
   desc: string;
+  payloads: string[];
 }
 
 const attackHints = computed<AttackHint[]>(() => {
@@ -848,70 +874,304 @@ const attackHints = computed<AttackHint[]>(() => {
   const hints: AttackHint[] = [];
   const flags = p.flags;
   const types = p.valueTypes;
+  const loc = p.location;
 
-  if (flags.includes('redirect' as any)) {
+  // ── Flag-based hints ──
+
+  if (flags.includes(Flag.REDIRECT)) {
     hints.push({
       icon: '↗',
       label: 'Open Redirect',
-      desc: 'Try //evil.com, /%2f%2fevil.com, https://evil.com',
+      desc: 'Parameter controls a redirect target. Insufficient origin validation allows an attacker to redirect victims to an arbitrary external domain, facilitating phishing and credential harvesting.',
+      payloads: [
+        '//evil.com',
+        '/%2f%2fevil.com',
+        'https://trusted.com@evil.com',
+        '/\\evil.com',
+        'https://evil.com%2f%40trusted.com',
+        '//evil.com/%2e%2e',
+      ],
     });
   }
-  if (flags.includes('file' as any)) {
+
+  if (flags.includes(Flag.FILE)) {
     hints.push({
       icon: '📁',
-      label: 'Path Traversal / LFI',
-      desc: 'Try ../../../../etc/passwd, ....//....//etc/passwd, /proc/self/environ',
+      label: 'Path Traversal / Local File Inclusion',
+      desc: 'Parameter is used to construct a filesystem path. Insufficient sanitisation of traversal sequences may permit reading arbitrary files from the server, including credentials, configuration, and private keys.',
+      payloads: [
+        '../../../../etc/passwd',
+        '....//....//etc/passwd',
+        '..%2f..%2f..%2fetc%2fpasswd',
+        '%252e%252e%252fetc%252fpasswd',
+        '/proc/self/environ',
+        '/etc/passwd%00',
+      ],
     });
   }
-  if (flags.includes('auth' as any)) {
+
+  if (flags.includes(Flag.AUTH)) {
     hints.push({
       icon: '🔑',
-      label: 'Auth Bypass',
-      desc: 'Try empty value, null, 0, true, admin — check if server-side validation is missing',
+      label: 'Authentication / Authorization Control',
+      desc: 'Parameter appears to influence an authentication or authorisation decision. Manipulating its value may permit privilege escalation, session bypass, or access to restricted resources without valid credentials.',
+      payloads: [
+        '(empty string)',
+        'null',
+        '0 / -1',
+        'true',
+        'admin',
+        "\' OR \'1\'=\'1",
+        '{"$gt":""}',
+      ],
     });
   }
+
+  // ── Value-type hints ──
+
   if (types.includes(ValueType.JWT)) {
     hints.push({
-      icon: '🪙',
-      label: 'JWT Attacks',
-      desc: 'Decode payload, test alg:none, RS256→HS256 confusion, modify claims without resigning',
+      icon: '🔐',
+      label: 'JWT Tampering',
+      desc: 'Parameter carries a JSON Web Token. Common vulnerabilities include algorithm confusion (RS256→HS256 using the public key as HMAC secret), the "none" algorithm bypass, weak secret brute-force, and unvalidated claim manipulation.',
+      payloads: [
+        'Set alg to "none", strip the signature segment',
+        'RS256→HS256: sign with server public key as HMAC secret',
+        'Modify "exp" / "iat" claim — test with expired token',
+        'Inject {"role":"admin"} or {"isAdmin":true} in payload',
+        'kid header injection: ../../../../dev/null',
+        'jku / x5u pointing to attacker-controlled JWKS endpoint',
+      ],
     });
   }
-  if (flags.includes('sensitive' as any) && !types.includes(ValueType.JWT)) {
+
+  if (flags.includes(Flag.SENSITIVE) && !types.includes(ValueType.JWT)) {
     hints.push({
-      icon: '🔍',
-      label: 'Info Disclosure',
-      desc: 'Check if value leaks credentials, tokens, or PII — verify it doesn\'t appear in responses',
+      icon: '👁',
+      label: 'Sensitive Value Exposure',
+      desc: 'Parameter carries a value classified as sensitive — likely a credential, API token, or personally identifiable information. Verify it does not appear reflected in server responses, error messages, logs, or caching intermediary headers.',
+      payloads: [
+        'Submit an invalid value — check if the original appears in any error response',
+        'Inspect response headers for X-Cache, Age (proxy caching of sensitive data)',
+        'Check Referrer-Policy — value may leak via outbound Referer header',
+        'Search all collected responses for the observed value verbatim',
+      ],
     });
   }
-  if (types.includes(ValueType.INTEGER) || types.includes(ValueType.UUID)) {
+
+  const hasUUID = types.some(isUUIDValueType);
+  if (types.includes(ValueType.INTEGER) || hasUUID) {
+    const uuidPayloads: string[] = [];
+    if (hasUUID) {
+      uuidPayloads.push('Substitute another account\'s UUID (captured via a second test session)');
+      uuidPayloads.push('00000000-0000-0000-0000-000000000000 (nil UUID)');
+      uuidPayloads.push('UUIDs from other resource types — check for cross-object access');
+      uuidPayloads.push('Compare HTTP 200 vs 403 vs 404 differentials across identifiers');
+      if (types.includes(ValueType.UUID_V1) || types.includes(ValueType.UUID_V6)) {
+        uuidPayloads.push('v1/v6 embeds a MAC address — extract node ID bytes for host attribution');
+        uuidPayloads.push('v1/v6 timestamps are monotonic — predict adjacent IDs by incrementing the time field');
+      }
+      if (types.includes(ValueType.UUID_V7)) {
+        uuidPayloads.push('v7 encodes a Unix ms timestamp in the top 48 bits — brute-force IDs created within a known time window');
+        uuidPayloads.push('v7 IDs are time-sorted — neighbouring values likely belong to the same user session');
+      }
+      if (types.includes(ValueType.UUID_COMPOUND)) {
+        uuidPayloads.push('Compound format (<uuid>@<timestamp>): tamper the timestamp suffix independently to test server-side validation');
+        uuidPayloads.push('Strip the @<timestamp> suffix — test whether the UUID alone is accepted');
+      }
+      if (types.includes(ValueType.UUID_V3) || types.includes(ValueType.UUID_V5)) {
+        uuidPayloads.push('v3/v5 are name-based and deterministic — if the namespace/name scheme is known, enumerate predictable IDs');
+      }
+    }
     hints.push({
-      icon: '🔢',
-      label: 'IDOR',
-      desc: 'Try neighbouring IDs, swapping with another user\'s ID, negative/zero/large values',
+      icon: '🆔',
+      label: 'Insecure Direct Object Reference (IDOR)',
+      desc: 'Parameter contains a direct object identifier. Substituting another user\'s identifier, or testing boundary and out-of-range values, may expose unauthorised data or permit operations on foreign resources.',
+      payloads: hasUUID
+        ? uuidPayloads
+        : [
+            'Increment / decrement by ±1 from the observed value',
+            '0, -1, 2147483647, 2147483648',
+            'Substitute the ID of a resource owned by a second test account',
+            'Compare response body size differential across sequential IDs',
+          ],
     });
   }
+
   if (types.includes(ValueType.URL)) {
     hints.push({
       icon: '🌐',
-      label: 'SSRF',
-      desc: 'Try http://169.254.169.254/latest/meta-data, internal hostnames, file:// URIs',
+      label: 'Server-Side Request Forgery (SSRF)',
+      desc: 'Parameter accepts a URL that the server likely fetches on the client\'s behalf. Insufficient allowlist enforcement permits requests to internal services, cloud instance metadata endpoints, and arbitrary external hosts.',
+      payloads: [
+        'http://169.254.169.254/latest/meta-data/',
+        'http://metadata.google.internal/computeMetadata/v1/',
+        'http://169.254.169.254/latest/meta-data/iam/security-credentials/',
+        'http://[::1]/ and http://localhost/admin',
+        'file:///etc/passwd',
+        'dict://internal:6379/INFO',
+        'gopher://internal:6379/_PING%0d%0a',
+      ],
     });
   }
+
   if (types.includes(ValueType.BOOLEAN)) {
     hints.push({
-      icon: '⚡',
-      label: 'Privilege Toggle',
-      desc: 'Flip true↔false — server may use this to gate admin features or bypass checks',
+      icon: '🔓',
+      label: 'Boolean Logic Bypass',
+      desc: 'Parameter accepts a boolean value that may gate an access control or feature-flag decision. Inverting or supplying unexpected truthy representations can expose administrative functionality or bypass enforcement checks.',
+      payloads: [
+        'Flip true↔false (also test: True, TRUE, 1, yes, on)',
+        'Omit the parameter entirely — observe default behaviour',
+        'Send the parameter with no value: ?admin=',
+        '1 / 0',
+      ],
     });
   }
-  if (p.location === 'query' || p.location === 'form' || p.location === 'json') {
+
+  if (types.includes(ValueType.EMAIL)) {
+    hints.push({
+      icon: '✉',
+      label: 'User Enumeration / Email Header Injection',
+      desc: 'Parameter contains an email address used for account lookup or outbound mail delivery. Differential error responses or response timing for registered vs. unregistered addresses enable user enumeration; CRLF sequences may allow mail header injection.',
+      payloads: [
+        'Compare timing and response body for known-valid vs. known-invalid address',
+        'attacker@evil.com%0d%0aBcc:victim@domain.com (CRLF injection)',
+        'test+tag@domain.com vs test@domain.com (alias handling bypass)',
+        '"attacker@evil.com"@domain.com (RFC 5321 quoted local-part)',
+        'very-long-local-part@domain.com (parser boundary test)',
+      ],
+    });
+  }
+
+  if (types.includes(ValueType.BASE64)) {
+    hints.push({
+      icon: '📦',
+      label: 'Serialized Payload / Encoded Object Injection',
+      desc: 'Parameter carries a Base64-encoded value. The decoded content may represent a serialized object, a signed token, or structured data susceptible to deserialization gadget chains or integrity bypass when the signature is absent or weak.',
+      payloads: [
+        'Decode: echo "VALUE" | base64 -d — inspect structure (JSON, PHP, Java ser)',
+        'Modify a field, re-encode, resubmit without altering any signature',
+        'Java: replace with ysoserial CommonsCollections gadget chain',
+        'PHP: O:8:"stdClass":1:{s:4:"role";s:5:"admin";}',
+        'Test both standard (+/) and URL-safe (-_) Base64 alphabets',
+      ],
+    });
+  }
+
+  if (types.includes(ValueType.HASH)) {
+    hints.push({
+      icon: '🔏',
+      label: 'Hash / HMAC Integrity Bypass',
+      desc: 'Parameter contains a hash or digest value likely used for integrity verification. If computed without a secret key, an attacker can recompute it after modifying associated data. SHA-1 / SHA-256 without HMAC construction is also vulnerable to hash-length extension.',
+      payloads: [
+        'Identify algorithm from length: MD5=32, SHA1=40, SHA256=64 hex chars',
+        'Recompute hash of modified data: echo -n "data" | sha256sum',
+        'Length extension: hashpump -s <hash> -d <data> -a <append> -k <keylen>',
+        'Empty string MD5: d41d8cd98f00b204e9800998ecf8427e',
+        'All-zeros: 0000000000000000000000000000000000000000000000000000000000000000',
+      ],
+    });
+  }
+
+  if (types.includes(ValueType.DECIMAL)) {
+    hints.push({
+      icon: '💰',
+      label: 'Business Logic — Numeric Manipulation',
+      desc: 'Parameter carries a decimal value likely involved in pricing, quantity, discount, or rate calculations. Boundary and edge-case values can trigger integer overflow, floating-point precision errors, or unintended business logic outcomes.',
+      payloads: [
+        '-1 and -0.01 (negative values)',
+        '0 and 0.001 (near-zero precision)',
+        '99999999.99 (large value overflow)',
+        '1e308 (floating-point max)',
+        'NaN and Infinity',
+        '1.0000000000000001 (IEEE 754 precision boundary)',
+      ],
+    });
+  }
+
+  // ── Location-based hints ──
+
+  if (loc === ParameterLocation.QUERY || loc === ParameterLocation.FORM || loc === ParameterLocation.JSON) {
     hints.push({
       icon: '💉',
-      label: 'Injection surface',
-      desc: `${p.location.toUpperCase()} parameter — good candidate for SQLi, XSS, template injection payloads`,
+      label: 'Injection Surface (SQLi / XSS / SSTI)',
+      desc: `Parameter is transmitted as a ${loc.toUpperCase()} field. Unsanitised values that reach a SQL interpreter, HTML renderer, or server-side template engine may result in injection vulnerabilities with significant confidentiality or integrity impact.`,
+      payloads: [
+        "' OR 1=1--  /  \" OR 1=1--",
+        "1; DROP TABLE users--",
+        "' UNION SELECT null,null,null--",
+        '<script>alert(document.domain)<\/script>',
+        '<img src=x onerror=alert(1)>',
+        '{{7*7}}  /  ${7*7}  /  <%= 7*7 %>',
+      ],
     });
   }
+
+  if (loc === ParameterLocation.HEADER) {
+    hints.push({
+      icon: '📋',
+      label: 'HTTP Header Injection / Host Manipulation',
+      desc: 'Parameter is an HTTP request header. CRLF injection enables response splitting and cache poisoning. Forged forwarding headers (X-Forwarded-For, X-Original-URL, X-Host) are commonly abused to bypass IP-based controls or influence backend routing decisions.',
+      payloads: [
+        'value%0d%0aInjected-Header: evil (CRLF injection)',
+        'X-Forwarded-For: 127.0.0.1 (internal IP bypass)',
+        'X-Original-URL: /admin (path override)',
+        'X-Forwarded-Host: evil.com (cache poisoning)',
+        'Host: evil.com (password reset link poisoning)',
+        'X-Forwarded-Proto: https (protocol override)',
+      ],
+    });
+  }
+
+  if (loc === ParameterLocation.COOKIE) {
+    hints.push({
+      icon: '🍪',
+      label: 'Cookie Manipulation / Session Attack',
+      desc: 'Parameter is a browser cookie. Investigate token entropy, test for session fixation, verify HttpOnly / Secure / SameSite attribute enforcement, and probe cookie-parsing logic for injection or overflow opportunities.',
+      payloads: [
+        'Decode and modify value (Base64, JWT, PHP serialized)',
+        '; Path=/admin (path attribute override)',
+        '; domain=.trusted.com (domain override)',
+        'name=%00value (null-byte injection)',
+        'Replay a session token captured before authentication',
+        'Oversized value to probe parser length limits',
+      ],
+    });
+  }
+
+  if (loc === ParameterLocation.PATH) {
+    hints.push({
+      icon: '🗂',
+      label: 'Path Parameter IDOR / Traversal',
+      desc: 'Parameter is embedded directly in the URL path segment. Substituting another resource identifier tests for IDOR; injecting URL-encoded slashes or traversal sequences probes for path confusion and routing bypass in the application layer.',
+      payloads: [
+        'Substitute with a resource ID owned by a second test account',
+        '../admin (relative path confusion)',
+        '%2F..%2F..%2F (percent-encoded traversal)',
+        '/api/resource/1%2F..%2Fadmin (traversal via encoded slash)',
+        'Duplicate segment: /api/resource/1/resource/2',
+        '%00 (null-byte — may truncate path suffix in some frameworks)',
+      ],
+    });
+  }
+
+  if (loc === ParameterLocation.MULTIPART) {
+    hints.push({
+      icon: '📤',
+      label: 'File Upload Bypass',
+      desc: 'Parameter is part of a multipart/form-data request. Manipulating the filename, Content-Type header, or file content within the MIME boundary may bypass upload filters and achieve remote code execution, stored XSS, or server-side path traversal.',
+      payloads: [
+        'filename="shell.php" (direct extension bypass)',
+        'filename="evil.php%00.jpg" (null-byte truncation)',
+        'filename="../../evil.php" (path traversal in filename)',
+        'Content-Type: image/jpeg with PHP/JSP payload in body',
+        'Polyglot: valid JPEG header with PHP code appended',
+        '<svg onload=alert(1)>.svg (stored XSS via SVG upload)',
+      ],
+    });
+  }
+
   return hints;
 });
 

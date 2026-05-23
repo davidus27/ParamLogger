@@ -1045,6 +1045,27 @@ thead th {
   word-break: break-word;
 }
 
+.hint-payloads {
+  list-style: none;
+  margin: 4px 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hint-payload {
+  font-family: 'JetBrains Mono', 'Fira Mono', 'Cascadia Code', ui-monospace, monospace;
+  font-size: 9.5px;
+  color: var(--c-fg-default);
+  background: var(--c-bg-subtle, rgba(255,255,255,0.05));
+  border: 1px solid var(--c-border-default);
+  border-radius: 3px;
+  padding: 1px 5px;
+  word-break: break-all;
+  line-height: 1.5;
+}
+
 /* ───── Create Finding form ───── */
 .d-finding-form {
   display: flex;

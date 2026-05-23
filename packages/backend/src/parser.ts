@@ -358,8 +358,8 @@ function normalizePath(path: string): string {
     // Numeric ID
     if (/^\d+$/.test(segment)) return '{id}';
     
-    // UUID
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(segment)) {
+    // UUID (v1-v8 + RFC 4122 variant bits)
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-9a-f][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(segment)) {
       return '{uuid}';
     }
     

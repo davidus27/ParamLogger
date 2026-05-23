@@ -39,7 +39,18 @@ export enum ValueType {
   STRING = 'string',
   EMAIL = 'email',
   URL = 'url',
+  // Generic UUID fallback (v2/DCE or unrecognised version)
   UUID = 'uuid',
+  // RFC 4122 / draft versions with strict per-version matching
+  UUID_V1 = 'uuid_v1', // time-based, embeds MAC address
+  UUID_V3 = 'uuid_v3', // name-based MD5
+  UUID_V4 = 'uuid_v4', // cryptographically random
+  UUID_V5 = 'uuid_v5', // name-based SHA-1
+  UUID_V6 = 'uuid_v6', // reordered time (monotonic successor to v1)
+  UUID_V7 = 'uuid_v7', // Unix epoch time-ordered (ms precision)
+  UUID_V8 = 'uuid_v8', // vendor/custom layout
+  // Composite format: <uuid>@<unix-timestamp-digits>
+  UUID_COMPOUND = 'uuid_compound',
   JWT = 'jwt',
   BASE64 = 'base64',
   HASH = 'hash',
