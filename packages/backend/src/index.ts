@@ -31,6 +31,38 @@ const parameters = new Map<string, Parameter>();
 const domains = new Map<string, number>();
 let totalRequests = 0;
 
+// Set of request ids we've already ingested for the current project. Both
+// `onInterceptRequest` (live traffic) and `runHistoricalScan` (paging through
+// stored requests) feed into `ingest`, so a request that hits the proxy while
+// a scan is in flight is otherwise observed by both paths and double-counted.
+// Keying off the request id ensures every request contributes exactly once,
+// which is what the displayed `count` ("N requests") must mean for the number
+// to match what "View in HTTP History" returns.
+const ingestedRequestIds = new Set<string>();
+
+// Per-parameter set of request keys (id when available, synthetic when not).
+// `parameter.count` is derived from `paramRequestKeys.get(id).size`, so the
+// displayed count is *by construction* equal to the number of distinct
+// requests that contributed to it. Even if `ingest` is somehow invoked
+// multiple times for the same request (Caido SDK quirks, race between
+// intercept and the historical scan, etc.), the count is correct because
+// `Set.add(sameValue)` is a no-op. This is the canonical defence against
+// the over-counting bug — the outer dedup at function entry is now just a
+// performance optimisation.
+const paramRequestKeys = new Map<string, Set<string>>();
+
+// Counter for synthetic request keys when `request.getId()` doesn't return a
+// usable id. We can't dedupe such requests safely, so we just give each one a
+// unique key — that preserves their data without falsely merging different
+// requests together. Reset alongside the rest of the project state.
+let syntheticRequestSeq = 0;
+
+// Diagnostic counters so we can verify the dedup is doing its job after the
+// next rescan. Logged periodically from `ingest` and at scan completion.
+let ingestCalls = 0;
+let ingestDedupHits = 0;
+let ingestMissingIds = 0;
+
 // Coalescing state for batched events
 const pendingParameterIds = new Set<string>();
 let pendingStatsChange = false;
@@ -92,6 +124,12 @@ async function bootstrapInitialProject(sdk: Caido): Promise<void> {
 function resetState(): void {
   parameters.clear();
   domains.clear();
+  ingestedRequestIds.clear();
+  paramRequestKeys.clear();
+  syntheticRequestSeq = 0;
+  ingestCalls = 0;
+  ingestDedupHits = 0;
+  ingestMissingIds = 0;
   totalRequests = 0;
   pendingParameterIds.clear();
   pendingStatsChange = false;
@@ -227,6 +265,45 @@ function scheduleFlush(): void {
  */
 function ingest(sdk: Caido, request: Request): void {
   try {
+    ingestCalls++;
+
+    // Compute a stable per-request key. We prefer the Caido request id
+    // (coerced to string so a `Set` keyed off it isn't confused by a
+    // number-vs-string mismatch between SDK paths), and fall back to a
+    // synthetic key when the SDK doesn't surface one. Synthetic keys are
+    // unique per call so we never merge two physically different requests
+    // — we simply lose the dedup safety net for those.
+    const rawId = safeCall<unknown>(() => request.getId(), undefined);
+    const hasUsableId =
+      rawId !== undefined && rawId !== null && rawId !== "";
+    const requestKey = hasUsableId
+      ? `id:${String(rawId)}`
+      : `syn:${++syntheticRequestSeq}`;
+
+    if (!hasUsableId) {
+      ingestMissingIds++;
+      if (ingestMissingIds <= 3) {
+        console.warn(
+          `[param-logger] ingest: request has no id, using synthetic key ` +
+            `(missing-id count=${ingestMissingIds})`,
+        );
+      }
+    } else if (ingestedRequestIds.has(requestKey)) {
+      // Outer dedup: skip re-parsing a request we've already processed.
+      // This is a performance optimisation; the canonical correctness
+      // guarantee for `count` lives in `paramRequestKeys` below.
+      ingestDedupHits++;
+      if (ingestDedupHits <= 5 || ingestDedupHits % 100 === 0) {
+        console.log(
+          `[param-logger] ingest: skip duplicate request key=${requestKey} ` +
+            `(total dedup hits=${ingestDedupHits})`,
+        );
+      }
+      return;
+    } else {
+      ingestedRequestIds.add(requestKey);
+    }
+
     const parsedRequest = parseRequest(request);
 
     totalRequests++;
@@ -235,37 +312,38 @@ function ingest(sdk: Caido, request: Request): void {
       console.log(
         `[param-logger] ingest #${totalRequests} ` +
           `${parsedRequest.method} ${parsedRequest.domain}${parsedRequest.normalizedPath} ` +
-          `params=${parsedRequest.parameters.length}`,
+          `params=${parsedRequest.parameters.length} key=${requestKey}`,
       );
     }
-    
+
     // Update domain count
     const domainCount = domains.get(parsedRequest.domain) || 0;
     domains.set(parsedRequest.domain, domainCount + 1);
 
-    // Track which parameter ids have already been counted for THIS request so a
-    // single request that repeats the same parameter (e.g. duplicate query keys
-    // like `?id=1&id=2` or multi-value headers) only contributes `+1` to the
-    // parameter's `count`. The displayed semantics is "number of requests where
-    // this parameter was seen", which must match what the HTTP History filter
-    // returns when the user clicks "View in HTTP History".
-    const countedThisRequest = new Set<string>();
-
-    // Process each parameter
+    // Process each parameter. We track the set of request keys per parameter
+    // and derive `count = set.size`, so an over-eager ingest path can never
+    // make `count` exceed the number of distinct requests that produced it.
     for (const parsedParam of parsedRequest.parameters) {
       const id = `${parsedRequest.domain}:${parsedRequest.method}:${parsedRequest.normalizedPath}:${parsedParam.location}:${parsedParam.name}`;
-      const alreadyCountedThisRequest = countedThisRequest.has(id);
-      countedThisRequest.add(id);
+      const now = parsedRequest.timestamp;
+
+      let keys = paramRequestKeys.get(id);
+      if (!keys) {
+        keys = new Set<string>();
+        paramRequestKeys.set(id, keys);
+      }
+      const sizeBefore = keys.size;
+      keys.add(requestKey);
+      const countIncreased = keys.size !== sizeBefore;
 
       let parameter = parameters.get(id);
-      const now = parsedRequest.timestamp;
 
       if (!parameter) {
         // New parameter - compute static flags once
         const valueType = classifyValue(parsedParam.value);
         const staticFlags = computeStaticFlags(parsedParam.name, parsedParam.value, valueType);
         const flags = recomputeNewFlag(staticFlags, now);
-        
+
         parameter = {
           id,
           domain: parsedRequest.domain,
@@ -275,7 +353,7 @@ function ingest(sdk: Caido, request: Request): void {
           name: parsedParam.name,
           valueTypes: [valueType],
           flags,
-          count: 1,
+          count: keys.size,
           firstSeen: now,
           lastSeen: now,
         };
@@ -285,33 +363,36 @@ function ingest(sdk: Caido, request: Request): void {
       } else {
         // Existing parameter - update it
         const valueType = classifyValue(parsedParam.value);
-        const wasChanged = parameter.count === 1; // Track if this causes notable changes
+        const previousCount = parameter.count;
 
-        if (!alreadyCountedThisRequest) {
-          parameter.count++;
-        }
+        // Canonical: count is the number of distinct request keys carrying
+        // this parameter. `Set.add` is idempotent, so this is safe to
+        // recompute on every ingest.
+        parameter.count = keys.size;
         parameter.lastSeen = now;
 
         // Add value type if not seen before
         if (!parameter.valueTypes.includes(valueType)) {
           parameter.valueTypes.push(valueType);
         }
-        
+
         // Only recompute NEW flag (static flags don't change)
         parameter.flags = recomputeNewFlag(parameter.flags, parameter.firstSeen);
-        
-        if (wasChanged || parameter.count % 10 === 0) {
+
+        // Emit on count changes (notable: first follow-up sighting, or every
+        // 10 thereafter) so the UI sees the updated count without flooding.
+        if (countIncreased && (previousCount === 1 || parameter.count % 10 === 0)) {
           pendingParameterIds.add(id);
         }
       }
     }
-    
+
     // Mark stats as needing update
     pendingStatsChange = true;
-    
+
     // Schedule coalesced flush
     scheduleFlush();
-    
+
   } catch (error) {
     console.error("Error ingesting request:", error);
   }
@@ -502,10 +583,21 @@ async function runHistoricalScan(sdk: Caido, generation: number): Promise<void> 
     const flush = (globalThis as any).__flushParameterEvents;
     if (flush) flush();
 
+    let paramKeyTotal = 0;
+    let paramKeyMax = 0;
+    for (const set of paramRequestKeys.values()) {
+      paramKeyTotal += set.size;
+      if (set.size > paramKeyMax) paramKeyMax = set.size;
+    }
+
     const duration = Date.now() - startTime;
     console.log(
-      `[param-logger] historical scan done: ${processedCount} requests, ` +
-        `${parameters.size} unique params, ${domains.size} domains in ${duration}ms`,
+      `[param-logger] historical scan done: pages-processed=${processedCount} requests, ` +
+        `ingest-calls=${ingestCalls} dedup-hits=${ingestDedupHits} ` +
+        `missing-ids=${ingestMissingIds} unique-ids-tracked=${ingestedRequestIds.size} ` +
+        `unique-params=${parameters.size} domains=${domains.size} ` +
+        `param-key-entries=${paramKeyTotal} max-keys-per-param=${paramKeyMax} ` +
+        `in ${duration}ms`,
     );
 
     // Emit scan completed

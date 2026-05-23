@@ -16,15 +16,17 @@
       </div>
       <span class="inv-result-count">{{ resultCountLabel }}</span>
       <div class="inv-header-actions">
-        <button class="inv-btn" @click="exportWordlist">↓ Wordlist</button>
+        <button
+          class="inv-btn"
+          :disabled="isRescanning"
+          title="Clear the inventory and rescan the current project from scratch"
+          @click="triggerRescan"
+        >{{ isRescanning ? '… Rescan' : '↻ Rescan' }}</button>
         <span
           class="inv-project-pill"
           :title="currentProject.projectId ? `Project: ${currentProject.projectName ?? currentProject.projectId}` : 'No active Caido project'"
         >▤ {{ currentProject.projectName || (currentProject.projectId ? '…' : 'No project') }}</span>
         <span class="inv-scope-pill">{{ currentScope?.name || 'All scopes' }}</span>
-        <span class="inv-conn" :class="{ connected: isConnected }">
-          {{ isConnected ? 'Connected' : 'Disconnected' }}
-        </span>
       </div>
     </header>
 
@@ -94,17 +96,74 @@
           @click="activeLoc = loc.value"
         >{{ loc.label }}</span>
         <span class="inv-filter-sep"></span>
-        <span class="inv-filter-label">Show</span>
+        <span class="inv-filter-label">Flags</span>
         <span
           class="inv-pill"
-          :class="{ on: activeFlags.interesting }"
-          @click="activeFlags.interesting = !activeFlags.interesting"
-        >Interesting only</span>
+          :class="{ on: activeFlags.has('file') }"
+          @click="toggleFlag('file')"
+        >file</span>
         <span
           class="inv-pill"
-          :class="{ on: activeFlags.new }"
-          @click="activeFlags.new = !activeFlags.new"
-        >New only</span>
+          :class="{ on: activeFlags.has('sensitive') }"
+          @click="toggleFlag('sensitive')"
+        >sensitive</span>
+        <span
+          class="inv-pill"
+          :class="{ on: activeFlags.has('auth') }"
+          @click="toggleFlag('auth')"
+        >auth</span>
+        <span
+          class="inv-pill"
+          :class="{ on: activeFlags.has('redirect') }"
+          @click="toggleFlag('redirect')"
+        >redirect</span>
+        <span
+          class="inv-pill"
+          :class="{ on: activeFlags.has('new') }"
+          @click="toggleFlag('new')"
+        >new</span>
+        <span class="inv-filter-sep"></span>
+        <span class="inv-filter-label">Value type</span>
+        <span
+          class="inv-pill"
+          :class="{ on: activeValueTypes.has(ValueType.JWT) }"
+          @click="toggleValueType(ValueType.JWT)"
+        >jwt</span>
+        <span
+          class="inv-pill"
+          :class="{ on: activeValueTypes.has(ValueType.URL) }"
+          @click="toggleValueType(ValueType.URL)"
+        >url</span>
+        <span
+          class="inv-pill"
+          :class="{ on: activeValueTypes.has(ValueType.EMAIL) }"
+          @click="toggleValueType(ValueType.EMAIL)"
+        >email</span>
+        <span
+          class="inv-pill"
+          :class="{ on: activeValueTypes.has(ValueType.UUID) }"
+          @click="toggleValueType(ValueType.UUID)"
+        >uuid</span>
+        <span
+          class="inv-pill"
+          :class="{ on: activeValueTypes.has(ValueType.BASE64) }"
+          @click="toggleValueType(ValueType.BASE64)"
+        >base64</span>
+        <span
+          class="inv-pill"
+          :class="{ on: activeValueTypes.has(ValueType.HASH) }"
+          @click="toggleValueType(ValueType.HASH)"
+        >hash</span>
+        <span
+          class="inv-pill"
+          :class="{ on: activeValueTypes.has(ValueType.INTEGER) }"
+          @click="toggleValueType(ValueType.INTEGER)"
+        >integer</span>
+        <span
+          class="inv-pill"
+          :class="{ on: activeValueTypes.has(ValueType.BOOLEAN) }"
+          @click="toggleValueType(ValueType.BOOLEAN)"
+        >boolean</span>
       </div>
 
       <div class="inv-table-wrap">
@@ -118,7 +177,6 @@
                 <th>Endpoint</th>
                 <th>Value type</th>
                 <th>Flags</th>
-                <th style="width:60px">Seen</th>
               </tr>
             </thead>
           </table>
@@ -153,7 +211,6 @@
                     :class="`flag-${flag}`"
                   >{{ flag }}</span>
                 </div>
-                <div class="table-cell seen-cell" style="width:60px">{{ p.count }}×</div>
               </div>
             </RecycleScroller>
           </div>
@@ -247,10 +304,6 @@
             <span class="v">{{ selectedParam.valueTypes.join(', ') }}</span>
           </div>
           <div class="d-row">
-            <span class="k">Seen</span>
-            <span class="v">{{ selectedParam.count }} request{{ selectedParam.count === 1 ? '' : 's' }}</span>
-          </div>
-          <div class="d-row">
             <span class="k">First seen</span>
             <span class="v">{{ formatDate(selectedParam.firstSeen) }}</span>
           </div>
@@ -294,7 +347,7 @@ import type {
   InventoryBackendEvents,
   Parameter,
 } from '@param-logger/shared';
-import { ParameterLocation } from '@param-logger/shared';
+import { ParameterLocation, ValueType } from '@param-logger/shared';
 import { useInventory } from '../composables/useInventory';
 import { useBackend } from '../composables/useBackend';
 import { useScope } from '../composables/useScope';
@@ -302,7 +355,7 @@ import { useProject } from '../composables/useProject';
 
 const caido = inject<Caido<InventoryBackendAPI, InventoryBackendEvents>>('caido');
 const { parameters, isLoading, setLoading, tree } = useInventory();
-const { init: initBackend, connectionStatus, refreshInventory } = useBackend();
+const { init: initBackend, connectionStatus, refreshInventory, resetAndRescan } = useBackend();
 const { currentScope, init: initScope, isHostInScope, cleanup: cleanupScope, getCurrentScope, explain, refresh: refreshScope } = useScope();
 const { currentProject, init: initProject, cleanup: cleanupProject } = useProject();
 
@@ -312,7 +365,8 @@ const isConnected = computed(() => connectionStatus.isConnected);
 const searchQuery = ref('');
 const treeFilter = ref('');
 const activeLoc = ref<'all' | ParameterLocation>('all');
-const activeFlags = reactive({ interesting: false, new: false });
+const activeFlags = reactive<Set<string>>(new Set());
+const activeValueTypes = reactive<Set<ValueType>>(new Set());
 const selectedScope = shallowRef<null | { domain: string; method?: string; path?: string }>(null);
 const selectedParam = shallowRef<Parameter | null>(null);
 const openDomains = reactive<Set<string>>(new Set());
@@ -344,8 +398,10 @@ const filteredParameters = computed<Parameter[]>(() => {
       if (selectedScope.value.method && p.method !== selectedScope.value.method) return false;
     }
     if (activeLoc.value !== 'all' && p.location !== activeLoc.value) return false;
-    if (activeFlags.interesting && p.flags.length === 0) return false;
-    if (activeFlags.new && !p.flags.includes('new' as any)) return false;
+    // if any flags are selected, param must carry at least one of them
+    if (activeFlags.size > 0 && !p.flags.some(f => activeFlags.has(f))) return false;
+    // if any value types are selected, param must carry at least one of them
+    if (activeValueTypes.size > 0 && !p.valueTypes.some(t => activeValueTypes.has(t))) return false;
     if (q) {
       const hay = `${p.name} ${p.normalizedPath} ${p.domain} ${p.valueTypes.join(' ')} ${p.flags.join(' ')}`.toLowerCase();
       if (!hay.includes(q)) return false;
@@ -420,8 +476,8 @@ watch(
     searchQuery.value = '';
     treeFilter.value = '';
     activeLoc.value = 'all';
-    activeFlags.interesting = false;
-    activeFlags.new = false;
+    activeFlags.clear();
+    activeValueTypes.clear();
     openDomains.clear();
     console.info('[Param Logger] project changed, cleared UI selection', {
       from: oldId ?? null,
@@ -442,8 +498,8 @@ watch(currentScope, async (newScope, oldScope) => {
   searchQuery.value = '';
   treeFilter.value = '';
   activeLoc.value = 'all';
-  activeFlags.interesting = false;
-  activeFlags.new = false;
+  activeFlags.clear();
+  activeValueTypes.clear();
 
   console.info('[Param Logger] scope changed, refreshing results', {
     from: oldScope?.name ?? null,
@@ -472,6 +528,22 @@ watch(currentScope, async (newScope, oldScope) => {
 });
 
 // ───── Actions ─────
+function toggleFlag(flag: string): void {
+  if (activeFlags.has(flag)) {
+    activeFlags.delete(flag);
+  } else {
+    activeFlags.add(flag);
+  }
+}
+
+function toggleValueType(valueType: ValueType): void {
+  if (activeValueTypes.has(valueType)) {
+    activeValueTypes.delete(valueType);
+  } else {
+    activeValueTypes.add(valueType);
+  }
+}
+
 function selectScope(scope: typeof selectedScope.value): void {
   selectedScope.value = scope;
 }
@@ -520,9 +592,20 @@ function copyText(txt: string): void {
   }
 }
 
-function exportWordlist(): void {
-  const names = [...new Set(filteredParameters.value.map((p) => p.name))].join('\n');
-  copyText(names);
+
+const isRescanning = ref(false);
+
+async function triggerRescan(): Promise<void> {
+  if (isRescanning.value) return;
+  isRescanning.value = true;
+  try {
+    selectedParam.value = null;
+    await resetAndRescan();
+  } catch (error) {
+    console.error('[Param Inventory] Failed to trigger rescan:', error);
+  } finally {
+    isRescanning.value = false;
+  }
 }
 
 // Escape a literal string for embedding inside a double-quoted HTTPQL value
