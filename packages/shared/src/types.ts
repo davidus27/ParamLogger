@@ -70,15 +70,26 @@ export interface InventoryFilters {
   domains?: string[];
 }
 
+// Project info for project-aware events
+export interface ProjectInfo {
+  projectId: string | null;
+  projectName: string | null;
+}
+
 // Events sent from backend to frontend
 export type InventoryBackendEvents = {
   'inventory-batch': (parameters: Parameter[]) => void;
   'stats-updated': (stats: InventoryStats) => void;
   'scan-started': (data: { total: number }) => void;
-  'scan-completed': (data: { 
-    processed: number; 
+  'scan-completed': (data: {
+    processed: number;
     duration: number;
   }) => void;
+  // Fired when Caido switches active project. Frontend should treat this as a
+  // signal to discard cached inventory state and reload from the backend, since
+  // the backend has just cleared its in-memory store and will re-emit
+  // `inventory-batch` events as it rescans the new project's history.
+  'project-changed': (data: ProjectInfo) => void;
   // Index signature to satisfy Caido BackendEvents constraint
   [key: string]: (...args: any[]) => void;
 };
@@ -88,6 +99,10 @@ export type InventoryBackendAPI = {
   getInventory: (filters?: InventoryFilters) => Promise<Parameter[]>;
   getDomains: () => Promise<Domain[]>;
   getStats: () => Promise<InventoryStats>;
+  // Returns the currently selected Caido project, if any.
+  getCurrentProject: () => Promise<ProjectInfo>;
+  // Manually clear the inventory and re-scan history for the current project.
+  resetAndRescan: () => Promise<{ ok: boolean }>;
   // Index signature to satisfy Caido BackendEndpoints constraint
   [key: string]: (...args: any[]) => any;
 };

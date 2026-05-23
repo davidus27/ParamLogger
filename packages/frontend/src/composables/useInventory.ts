@@ -107,6 +107,24 @@ export function useInventory() {
     Object.assign(state.stats, newStats);
   }
 
+  // Wipe every cached parameter, domain, and stat. Used when the active Caido
+  // project changes so we don't render stale data from the previous project
+  // while the backend rescans.
+  function clearInventory() {
+    parametersMap.clear();
+    domainIndex.clear();
+    parametersRef.value = Object.freeze([] as Parameter[]);
+    domainsRef.value = Object.freeze([] as Domain[]);
+    // Mutate in place so existing reactive consumers keep their reference.
+    Object.assign(state.stats, {
+      totalRequests: 0,
+      totalParams: 0,
+      uniqueParams: 0,
+      domains: 0,
+      endpoints: 0,
+    });
+  }
+
   function setLoading(loading: boolean) {
     state.isLoading = loading;
   }
@@ -174,5 +192,6 @@ export function useInventory() {
     updateStats,
     setLoading,
     upsertParameters, // New method for incremental updates
+    clearInventory,
   };
 }

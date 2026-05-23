@@ -2,13 +2,14 @@
  * Backend plugin entry point for Parameter Inventory
  */
 
-import type { Caido, Request } from "@caido/sdk-backend";
+import type { Caido, Request, Project } from "@caido/sdk-backend";
 import type {
   Parameter,
   Domain,
   InventoryStats,
   InventoryFilters,
   ParameterLocation,
+  ProjectInfo,
 } from "@param-inventory/shared";
 import {
   ValueType,
@@ -24,7 +25,8 @@ import { parseRequest } from "./parser.js";
 
 const BUILD_TAG = "param-inventory backend build 2026-05-20b";
 
-// In-memory store
+// In-memory store. Cleared whenever the active Caido project changes so that
+// parameters from a previous project never leak into a new project's view.
 const parameters = new Map<string, Parameter>();
 const domains = new Map<string, number>();
 let totalRequests = 0;
@@ -34,6 +36,15 @@ const pendingParameterIds = new Set<string>();
 let pendingStatsChange = false;
 let flushTimer: NodeJS.Timeout | null = null;
 let lastStats = { totalRequests: 0, uniqueParams: 0, domains: 0 };
+
+// Tracks the currently selected Caido project. We compare against this on
+// `onProjectChange` so we only reset state when the project actually changed.
+let currentProjectId: string | null = null;
+
+// Generation counter for in-flight historical scans. When the project changes
+// while a scan is running, we bump this so the in-flight scan stops applying
+// results from the previous project.
+let scanGeneration = 0;
 
 /**
  * Initialize the parameter inventory plugin
@@ -48,7 +59,107 @@ export function init(sdk: Caido): void {
     ingest(sdk, req);
   });
 
-  void runHistoricalScan(sdk);
+  // Subscribe to project changes so we can clear and rescan whenever the user
+  // switches Caido projects. The frontend listens for the `project-changed`
+  // event we emit and refreshes its UI accordingly.
+  sdk.events.onProjectChange((s, project) => {
+    void handleProjectChange(s, project);
+  });
+
+  // Bootstrap: capture the initial project id, then run the first historical
+  // scan. We do this through `handleProjectChange` so the same code path is
+  // exercised on startup and on subsequent project switches.
+  void bootstrapInitialProject(sdk);
+}
+
+/**
+ * Read the currently selected project (if any) and run the initial scan.
+ */
+async function bootstrapInitialProject(sdk: Caido): Promise<void> {
+  try {
+    const project = (await sdk.projects.getCurrent?.()) ?? null;
+    await handleProjectChange(sdk, project);
+  } catch (error) {
+    console.error("[param-inventory] failed to read initial project:", error);
+    // Fall back to scanning whatever Caido currently exposes.
+    await runHistoricalScan(sdk, ++scanGeneration);
+  }
+}
+
+/**
+ * Reset all in-memory inventory state. Called on project change.
+ */
+function resetState(): void {
+  parameters.clear();
+  domains.clear();
+  totalRequests = 0;
+  pendingParameterIds.clear();
+  pendingStatsChange = false;
+  if (flushTimer !== null) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  lastStats = { totalRequests: 0, uniqueParams: 0, domains: 0 };
+}
+
+/**
+ * React to a Caido project change: wipe state, notify the frontend, and rescan
+ * the new project's history.
+ */
+async function handleProjectChange(
+  sdk: Caido,
+  project: Project | null,
+): Promise<void> {
+  const projectId = project ? safeCall(() => project.getId(), null) : null;
+  const projectName = project ? safeCall(() => project.getName(), null) : null;
+
+  // Skip if this is just a redundant notification for the same project.
+  if (projectId === currentProjectId && parameters.size > 0) {
+    return;
+  }
+  currentProjectId = projectId;
+
+  console.log(
+    `[param-inventory] project changed → ${projectName ?? "(none)"} (id=${projectId ?? "null"})`,
+  );
+
+  // Bump generation so any in-flight historical scan stops writing results.
+  const generation = ++scanGeneration;
+
+  resetState();
+
+  const info: ProjectInfo = { projectId, projectName };
+  try {
+    sdk.api.send("project-changed", info);
+  } catch (error) {
+    console.error("[param-inventory] failed to send project-changed event:", error);
+  }
+
+  // Always emit a zeroed stats update so the frontend immediately reflects the
+  // empty state for the new project, even if the rescan hasn't produced
+  // batches yet (or there is no project at all).
+  try {
+    sdk.api.send("stats-updated", {
+      totalRequests: 0,
+      uniqueParams: 0,
+      domains: 0,
+    });
+    lastStats = { totalRequests: 0, uniqueParams: 0, domains: 0 };
+  } catch (error) {
+    console.error("[param-inventory] failed to send stats reset:", error);
+  }
+
+  if (project) {
+    await runHistoricalScan(sdk, generation);
+  }
+}
+
+function safeCall<T>(fn: () => T, fallback: T): T {
+  try {
+    return fn();
+  } catch {
+    return fallback;
+  }
 }
 
 /**
@@ -300,37 +411,54 @@ function recomputeNewFlag(flags: Flag[], firstSeen: Date): Flag[] {
 }
 
 /**
- * Run historical scan of existing requests
+ * Run historical scan of existing requests for the active project.
+ *
+ * `generation` is a token captured at the time the scan started. If the
+ * project changes mid-scan, `scanGeneration` is bumped and we abort so we
+ * don't ingest requests from the previous project into the new project's
+ * inventory.
  */
-async function runHistoricalScan(sdk: Caido): Promise<void> {
-  console.log("[param-inventory] starting historical scan...");
+async function runHistoricalScan(sdk: Caido, generation: number): Promise<void> {
+  console.log(`[param-inventory] starting historical scan (gen=${generation})...`);
 
   const startTime = Date.now();
   let processedCount = 0;
 
   try {
     sdk.api.send('scan-started', { total: 0 });
-    
+
     // Page through requests using cursor-based pagination - smaller batch size for better responsiveness
     const batchSize = 50;
     let hasMore = true;
     let cursor: string | null = null;
-    
+
     while (hasMore) {
+      if (generation !== scanGeneration) {
+        console.log(`[param-inventory] aborting stale scan (gen=${generation}, current=${scanGeneration})`);
+        return;
+      }
+
       // Build query with cursor
       let query = sdk.requests.query().first(batchSize);
       if (cursor) {
         query = query.after(cursor);
       }
-      
+
       // Execute query
       const connection = await query.execute();
       const requests = connection.items || [];
-      
+
       if (requests.length === 0) {
         break;
       }
-      
+
+      // If the project changed while we awaited the page, abort before
+      // applying any results so they aren't attributed to the new project.
+      if (generation !== scanGeneration) {
+        console.log(`[param-inventory] aborting stale scan after fetch (gen=${generation}, current=${scanGeneration})`);
+        return;
+      }
+
       // Process each request
       for (const item of requests) {
         try {
@@ -340,10 +468,10 @@ async function runHistoricalScan(sdk: Caido): Promise<void> {
           console.error("Error processing historical request:", error);
         }
       }
-      
+
       // Yield event loop between batches to keep Caido responsive
       await new Promise((resolve) => setTimeout(resolve, 0));
-      
+
       // Check for next page
       const pageInfo = connection.pageInfo;
       if (pageInfo && pageInfo.hasNextPage && pageInfo.endCursor) {
@@ -352,27 +480,32 @@ async function runHistoricalScan(sdk: Caido): Promise<void> {
         hasMore = false;
       }
     }
-    
+
+    if (generation !== scanGeneration) {
+      // Project changed right before we completed; results are stale.
+      return;
+    }
+
     // Force flush any pending events before completion
     const flush = (globalThis as any).__flushParameterEvents;
     if (flush) flush();
-    
+
     const duration = Date.now() - startTime;
     console.log(
       `[param-inventory] historical scan done: ${processedCount} requests, ` +
         `${parameters.size} unique params, ${domains.size} domains in ${duration}ms`,
     );
-    
+
     // Emit scan completed
     sdk.api.send('scan-completed', { processed: processedCount, duration });
-    
+
     // Final stats update (direct send since scan is complete)
     sdk.api.send('stats-updated', {
       totalRequests,
       uniqueParams: parameters.size,
       domains: domains.size,
     });
-    
+
   } catch (error) {
     console.error("Error during historical scan:", error);
   }
@@ -437,5 +570,44 @@ function registerRpc(sdk: Caido): void {
       uniqueParams: parameters.size,
       domains: domains.size,
     } as InventoryStats;
+  });
+
+  // Return info about the currently selected Caido project. The frontend uses
+  // this to display the active project name and to verify on startup that its
+  // local state matches the backend's project context.
+  sdk.api.register('getCurrentProject', async (sdk): Promise<ProjectInfo> => {
+    try {
+      const project = (await sdk.projects.getCurrent?.()) ?? null;
+      return {
+        projectId: project ? safeCall(() => project.getId(), null) : null,
+        projectName: project ? safeCall(() => project.getName(), null) : null,
+      };
+    } catch (error) {
+      console.error('[param-inventory] getCurrentProject failed:', error);
+      return { projectId: null, projectName: null };
+    }
+  });
+
+  // Manually clear and rescan. Safe to call any time; useful as a recovery
+  // path from the frontend if the user wants to force a refresh.
+  sdk.api.register('resetAndRescan', async (sdk) => {
+    try {
+      const project = (await sdk.projects.getCurrent?.()) ?? null;
+      const generation = ++scanGeneration;
+      resetState();
+      sdk.api.send('stats-updated', {
+        totalRequests: 0,
+        uniqueParams: 0,
+        domains: 0,
+      });
+      lastStats = { totalRequests: 0, uniqueParams: 0, domains: 0 };
+      if (project) {
+        await runHistoricalScan(sdk, generation);
+      }
+      return { ok: true };
+    } catch (error) {
+      console.error('[param-inventory] resetAndRescan failed:', error);
+      return { ok: false };
+    }
   });
 }

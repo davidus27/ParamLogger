@@ -192,6 +192,28 @@
   background: var(--c-bg-success);
 }
 
+.inv-scope-pill,
+.inv-project-pill {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--c-fg-subtle);
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--c-bg-elevated);
+  border: 1px solid var(--c-border-default);
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inv-project-pill {
+  /* Slight emphasis so the active project is distinguishable from the scope pill. */
+  color: var(--c-fg-default);
+}
+
 /* ───── Buttons ───── */
 .inv-btn {
   background: var(--c-bg-elevated);
@@ -683,6 +705,94 @@ thead th {
   padding: 48px 24px;
   text-align: center;
   line-height: 1.6;
+}
+
+.inv-scope-empty {
+  color: var(--c-fg-default);
+}
+
+.scope-empty-panel {
+  max-width: 500px;
+  padding: 24px;
+  background: var(--c-surface-secondary);
+  border: 1px solid var(--c-border-default);
+  border-radius: 8px;
+  text-align: left;
+}
+
+.scope-empty-panel h3 {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--c-fg-default);
+}
+
+.scope-details {
+  margin: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scope-list {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.scope-label {
+  font-weight: 500;
+  color: var(--c-fg-default);
+  min-width: 70px;
+  flex-shrink: 0;
+}
+
+.scope-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.scope-pattern {
+  background: var(--c-surface-primary);
+  border: 1px solid var(--c-border-default);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--c-fg-default);
+}
+
+.scope-empty-list {
+  color: var(--c-fg-subtle);
+  font-style: italic;
+}
+
+.scope-tip {
+  margin: 16px 0 0 0;
+  padding: 12px;
+  background: var(--c-surface-primary);
+  border: 1px solid var(--c-border-default);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--c-fg-subtle);
+  line-height: 1.4;
+}
+
+.scope-tip strong {
+  color: var(--c-fg-default);
+}
+
+.scope-tip code {
+  background: var(--c-surface-secondary);
+  border: 1px solid var(--c-border-default);
+  border-radius: 2px;
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--c-fg-default);
 }
 
 /* ───── Status bar ───── */

@@ -17,6 +17,11 @@
       <span class="inv-result-count">{{ resultCountLabel }}</span>
       <div class="inv-header-actions">
         <button class="inv-btn" @click="exportWordlist">↓ Wordlist</button>
+        <span
+          class="inv-project-pill"
+          :title="currentProject.projectId ? `Project: ${currentProject.projectName ?? currentProject.projectId}` : 'No active Caido project'"
+        >▤ {{ currentProject.projectName || (currentProject.projectId ? '…' : 'No project') }}</span>
+        <span class="inv-scope-pill">{{ currentScope?.name || 'All scopes' }}</span>
         <span class="inv-conn" :class="{ connected: isConnected }">
           {{ isConnected ? 'Connected' : 'Disconnected' }}
         </span>
@@ -44,7 +49,7 @@
           <span class="inv-tree-arrow hidden">▶</span>
           <span class="inv-tree-icon">◉</span>
           <span class="inv-tree-label all">All targets</span>
-          <span class="inv-tree-count">{{ parameters.length }}</span>
+          <span class="inv-tree-count">{{ scopedParameterCount }}</span>
         </div>
 
         <template v-for="domain in filteredTree" :key="domain.name">
@@ -155,6 +160,34 @@
         </div>
 
         <div v-else-if="isLoading" class="inv-empty">Loading…</div>
+        <div v-else-if="currentScope && scopedParameterCount === 0" class="inv-empty inv-scope-empty">
+          <div class="scope-empty-panel">
+            <h3>Active scope <strong>{{ currentScope.name }}</strong> matches 0 captured parameters.</h3>
+            <div class="scope-details">
+              <div class="scope-list">
+                <span class="scope-label">Allowlist:</span>
+                <span class="scope-items">
+                  <template v-if="currentScope.allowlist.length">
+                    <code v-for="pattern in currentScope.allowlist" :key="pattern" class="scope-pattern">{{ pattern }}</code>
+                  </template>
+                  <em v-else class="scope-empty-list">(empty)</em>
+                </span>
+              </div>
+              <div class="scope-list">
+                <span class="scope-label">Denylist:</span>
+                <span class="scope-items">
+                  <template v-if="currentScope.denylist.length">
+                    <code v-for="pattern in currentScope.denylist" :key="pattern" class="scope-pattern">{{ pattern }}</code>
+                  </template>
+                  <em v-else class="scope-empty-list">(empty)</em>
+                </span>
+              </div>
+            </div>
+            <p class="scope-tip">
+              <strong>Tip:</strong> In Caido's Scopes page, prefix entries with <code>*</code> to include subdomains.
+            </p>
+          </div>
+        </div>
         <div v-else class="inv-empty">
           No parameters collected yet. Browse some traffic through Caido to start collecting.
         </div>
@@ -165,7 +198,7 @@
     <footer class="inv-statusbar">
       <span>
         <span class="live-dot" :class="{ off: !isConnected }"></span>
-        {{ isConnected ? 'Listening' : 'Disconnected' }} · {{ parameters.length }} unique params
+        {{ isConnected ? 'Listening' : 'Disconnected' }} · {{ scopedParameterCount }} unique params
       </span>
       <span>v0.1.0</span>
     </footer>
@@ -253,7 +286,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, onUnmounted, inject, shallowRef } from 'vue';
+import { ref, computed, reactive, onMounted, onUnmounted, inject, shallowRef, watch } from 'vue';
 import { RecycleScroller } from 'vue-virtual-scroller';
 import type { Caido, HTTPQL } from '@caido/sdk-frontend';
 import type {
@@ -264,10 +297,14 @@ import type {
 import { ParameterLocation } from '@param-inventory/shared';
 import { useInventory } from '../composables/useInventory';
 import { useBackend } from '../composables/useBackend';
+import { useScope } from '../composables/useScope';
+import { useProject } from '../composables/useProject';
 
 const caido = inject<Caido<InventoryBackendAPI, InventoryBackendEvents>>('caido');
 const { parameters, isLoading, setLoading, tree } = useInventory();
-const { init: initBackend, connectionStatus } = useBackend();
+const { init: initBackend, connectionStatus, refreshInventory } = useBackend();
+const { currentScope, init: initScope, isHostInScope, cleanup: cleanupScope, getCurrentScope, explain, refresh: refreshScope } = useScope();
+const { currentProject, init: initProject, cleanup: cleanupProject } = useProject();
 
 const isConnected = computed(() => connectionStatus.isConnected);
 
@@ -292,10 +329,15 @@ const locationFilters: Array<{ value: 'all' | ParameterLocation; label: string }
 ];
 
 // ───── Derived state ─────
+// First filter by scope to get the scoped parameter set
+const scopedParameters = computed(() => parameters.value.filter(p => isHostInScope(p.domain)));
+const scopedParameterCount = computed(() => scopedParameters.value.length);
+
 const filteredParameters = computed<Parameter[]>(() => {
   const q = searchQuery.value.trim().toLowerCase();
 
-  return parameters.value.filter((p) => {
+  return scopedParameters.value.filter((p) => {
+    // Existing filters (scope already applied in scopedParameters)
     if (selectedScope.value) {
       if (p.domain !== selectedScope.value.domain) return false;
       if (selectedScope.value.path && p.normalizedPath !== selectedScope.value.path) return false;
@@ -312,15 +354,18 @@ const filteredParameters = computed<Parameter[]>(() => {
   });
 });
 
-// Use the memoized tree from the inventory store and apply filtering
+// Use the memoized tree from the inventory store and apply scope + text filtering
 const filteredTree = computed(() => {
+  // First filter by scope
+  const scopedDomains = tree.value.filter(domain => isHostInScope(domain.name));
+  
   const filter = treeFilter.value.trim().toLowerCase();
   if (!filter) {
-    return tree.value;
+    return scopedDomains;
   }
 
   const result = [];
-  for (const domain of tree.value) {
+  for (const domain of scopedDomains) {
     const domainMatch = domain.name.toLowerCase().includes(filter);
     const matchingEndpoints = domain.endpoints.filter(
       (e) =>
@@ -351,13 +396,79 @@ const resultCountLabel = computed(() => {
   const n = filteredParameters.value.length;
   const base = `${n} parameter${n === 1 ? '' : 's'}`;
   if (!selectedScope.value) {
-    const domains = new Set(parameters.value.map((p) => p.domain)).size;
+    // Count domains within the current scope (use scopedParameters for consistency)
+    const domains = new Set(scopedParameters.value.map((p) => p.domain)).size;
     return `${base} across ${domains} domain${domains === 1 ? '' : 's'}`;
   }
   if (selectedScope.value.path) {
     return `${base} in ${selectedScope.value.method} ${selectedScope.value.path}`;
   }
   return `${base} in ${selectedScope.value.domain}`;
+});
+
+// ───── Watchers ─────
+// When the Caido project changes, drop any selection / filter state that
+// references items from the previous project. The actual inventory reload
+// (clearing the cache + refetching) is handled by `useBackend` in response
+// to the backend's `project-changed` event, so we don't trigger it here.
+watch(
+  () => currentProject.value.projectId,
+  (newId, oldId) => {
+    if (newId === oldId) return;
+    selectedScope.value = null;
+    selectedParam.value = null;
+    searchQuery.value = '';
+    treeFilter.value = '';
+    activeLoc.value = 'all';
+    activeFlags.interesting = false;
+    activeFlags.new = false;
+    openDomains.clear();
+    console.info('[Param Inventory] project changed, cleared UI selection', {
+      from: oldId ?? null,
+      to: newId ?? null,
+    });
+  },
+);
+
+// When the Caido scope changes, narrow the view to the new scope and pull
+// fresh data from the backend so results always reflect the active scope.
+watch(currentScope, async (newScope, oldScope) => {
+  // Clear stale UI state that may reference out-of-scope items.
+  selectedScope.value = null;
+  selectedParam.value = null;
+
+  // Reset narrowing filters so the user immediately sees the full in-scope
+  // set rather than a possibly-empty intersection with the previous filters.
+  searchQuery.value = '';
+  treeFilter.value = '';
+  activeLoc.value = 'all';
+  activeFlags.interesting = false;
+  activeFlags.new = false;
+
+  console.info('[Param Inventory] scope changed, refreshing results', {
+    from: oldScope?.name ?? null,
+    to: newScope?.name ?? null,
+  });
+
+  // Always refetch from backend so the visible list reflects the latest data
+  // under the new scope (also covers cases where parameters arrived while a
+  // different scope was active).
+  if (caido) {
+    try {
+      setLoading(true);
+      await refreshInventory();
+    } catch (error) {
+      console.warn('[Param Inventory] Failed to refresh inventory after scope change:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  console.info('[Param Inventory] scope filter result', {
+    scope: newScope,
+    scoped: scopedParameterCount.value,
+    total: parameters.value.length,
+  });
 });
 
 // ───── Actions ─────
@@ -481,39 +592,66 @@ function onKeyDown(e: KeyboardEvent): void {
 onMounted(async () => {
   document.addEventListener('keydown', onKeyDown);
   
+  // Expose debug helpers globally (always on, not just in dev mode)
+  (window as any).__paramInventoryDebug = {
+    getCurrentScope,
+    scopedParameters,
+    explain,
+    getCurrentProject: () => currentProject.value,
+    refreshScope: () => refreshScope('debug-helper'),
+  };
+  
   // Expose for testing in development mode
-  if (import.meta.env.DEV) {
-    (window as any).vueApp = {
-      tree: filteredTree,
-      parameters,
-      upsertTest: () => {
-        // Test upsert functionality
-        console.log('🧪 Testing upsert functionality...');
-        const { upsertParameters } = useInventory();
-        upsertParameters([
-          {
-            id: 'test-upsert-1',
-            domain: 'test-upsert.com',
-            method: 'GET',
-            normalizedPath: '/test',
-            location: 'query' as any,
-            name: 'test_param',
-            valueTypes: ['string' as any],
-            flags: ['new' as any],
-            count: 1,
-            firstSeen: new Date(),
-            lastSeen: new Date()
-          }
-        ]);
-        console.log('✅ Upsert test completed');
-      }
-    };
+  const isDev = (import.meta as any).env?.DEV;
+  if (isDev) {
+    // Import the simulation function dynamically to avoid bundling in production
+    import('../mock-caido-sdk').then(({ simulateScopeChange, simulateProjectChange }) => {
+      (window as any).vueApp = {
+        tree: filteredTree,
+        parameters,
+        currentScope,
+        currentProject,
+        upsertTest: () => {
+          // Test upsert functionality
+          console.log('🧪 Testing upsert functionality...');
+          const { upsertParameters } = useInventory();
+          upsertParameters([
+            {
+              id: 'test-upsert-1',
+              domain: 'test-upsert.com',
+              method: 'GET',
+              normalizedPath: '/test',
+              location: 'query' as any,
+              name: 'test_param',
+              valueTypes: ['string' as any],
+              flags: ['new' as any],
+              count: 1,
+              firstSeen: new Date(),
+              lastSeen: new Date()
+            }
+          ]);
+          console.log('✅ Upsert test completed');
+        },
+        simulateScopeChange: (scopeId?: string) => {
+          console.log('🧪 Testing scope change to:', scopeId || 'no scope');
+          simulateScopeChange(scopeId);
+          console.log('✅ Scope change simulation completed');
+        },
+        simulateProjectChange: (projectId?: string) => {
+          console.log('🧪 Testing project change to:', projectId || 'no project');
+          simulateProjectChange(projectId);
+          console.log('✅ Project change simulation completed');
+        }
+      };
+    });
   }
   
   try {
     setLoading(true);
     if (caido) {
       initBackend(caido);
+      initScope(caido);
+      void initProject(caido);
     } else {
       console.warn('No Caido SDK provided, running in development mode');
     }
@@ -526,5 +664,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeyDown);
+  cleanupScope();
+  cleanupProject();
 });
 </script>

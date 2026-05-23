@@ -15,7 +15,7 @@ const MOCK_PARAMETERS: Parameter[] = [
     firstSeen: new Date('2026-04-01'), lastSeen: new Date() },
   { id: 'a2', domain: 'auth.example.com', method: 'POST', normalizedPath: '/oauth/authorize',
     location: ParameterLocation.QUERY, name: 'response_type',
-    valueTypes: [ValueType.STRING], flag  s: [], count: 89,
+    valueTypes: [ValueType.STRING], flags: [], count: 89,
     firstSeen: new Date('2026-04-01'), lastSeen: new Date() },
   { id: 'a3', domain: 'auth.example.com', method: 'POST', normalizedPath: '/oauth/authorize',
     location: ParameterLocation.QUERY, name: 'client_id',
@@ -133,7 +133,39 @@ const mockBackendAPI: InventoryBackendAPI = {
       uniqueParams: MOCK_PARAMETERS.length,
       domains: domains.size,
     } as InventoryStats;
-  }
+  },
+
+  async getCurrentProject() {
+    const project = currentProjectId ? MOCK_PROJECTS[currentProjectId] : null;
+    return {
+      projectId: project?.id ?? null,
+      projectName: project?.name ?? null,
+    };
+  },
+
+  async resetAndRescan() {
+    console.log('Mock: resetAndRescan called');
+    // The mock has no real "rescan" — just re-emit the same canned data.
+    setTimeout(() => {
+      const listeners = eventListeners.get('inventory-batch') || [];
+      listeners.forEach((cb) => cb(MOCK_PARAMETERS));
+    }, 50);
+    return { ok: true };
+  },
+};
+
+// Mock scopes used by the simulated `caido.scopes` API.
+const MOCK_SCOPES = [
+  { id: '1', name: 'API targets', allowlist: ['*api.example.com'], denylist: [] },
+  { id: '2', name: 'Admin only', allowlist: ['admin.example.com'], denylist: [] },
+];
+
+// Mock projects used by the simulated `caido.projects` API. The mock backend
+// doesn't actually segregate parameters by project — switching projects in
+// dev mode simply exercises the refresh flow.
+const MOCK_PROJECTS: Record<string, { id: string; name: string }> = {
+  'proj-acme': { id: 'proj-acme', name: 'Acme Bug Bounty' },
+  'proj-internal': { id: 'proj-internal', name: 'Internal Pentest' },
 };
 
 // Event simulation for testing
@@ -230,11 +262,20 @@ export const mockCaido: Caido<InventoryBackendAPI, InventoryBackendEvents> = {
   graphql: {} as any,
   ui: {} as any,
   ai: {} as any,
-  scopes: {} as any,
+  scopes: {
+    getScopes: () => MOCK_SCOPES,
+    getCurrentScope: () => MOCK_SCOPES.find((s) => s.id === currentScopeId),
+    onCurrentScopeChange: (_cb: any) => ({ stop: () => {} }),
+    createScope: () => {},
+    deleteScope: () => {},
+    updateScope: () => {},
+  },
   findings: {} as any,
   commands: {} as any,
   menu: {} as any,
-  projects: {} as any,
+  projects: {
+    onCurrentProjectChange: (_cb: any) => ({ stop: () => {} }),
+  } as any,
   window: {} as any,
   assets: {} as any,
   shortcuts: {} as any,
@@ -309,4 +350,86 @@ export function simulateBatchUpdate() {
   
   listeners.forEach(callback => callback(testParams));
   console.log('Mock: Manual batch update sent with', testParams.length, 'parameters');
+}
+
+// Helper function for testing scope changes
+let scopeChangeListeners: Function[] = [];
+
+export function simulateScopeChange(scopeId?: string) {
+  console.log('Mock: Simulating scope change to', scopeId || 'no scope');
+  
+  // Update the current scope ID
+  currentScopeId = scopeId;
+  
+  // Notify all scope change listeners
+  scopeChangeListeners.forEach(callback => {
+    callback({ scopeId });
+  });
+  
+  console.log('Mock: Notified', scopeChangeListeners.length, 'scope change listeners');
+}
+
+// Update the mock scope implementation to track listeners
+mockCaido.scopes.onCurrentScopeChange = (callback: any) => {
+  console.log('Mock: Registering scope change listener');
+  scopeChangeListeners.push(callback);
+  
+  return { 
+    stop: () => {
+      const index = scopeChangeListeners.indexOf(callback);
+      if (index > -1) {
+        scopeChangeListeners.splice(index, 1);
+      }
+      console.log('Mock: Stopped listening to scope changes');
+    }
+  };
+};
+
+// Store current scope ID for getCurrentScope
+let currentScopeId: string | undefined = undefined;
+
+// ─── Project simulation ───
+// Track project change listeners and the current project id. Mirrors the scope
+// simulation so dev-mode users can exercise the project refresh flow.
+let projectChangeListeners: Function[] = [];
+let currentProjectId: string | undefined = undefined;
+
+mockCaido.projects.onCurrentProjectChange = (callback: any) => {
+  console.log('Mock: Registering project change listener');
+  projectChangeListeners.push(callback);
+  return {
+    stop: () => {
+      const index = projectChangeListeners.indexOf(callback);
+      if (index > -1) {
+        projectChangeListeners.splice(index, 1);
+      }
+      console.log('Mock: Stopped listening to project changes');
+    },
+  };
+};
+
+export function simulateProjectChange(projectId?: string): void {
+  console.log('Mock: Simulating project change to', projectId || 'no project');
+  currentProjectId = projectId;
+
+  // Notify the frontend SDK listener (`caido.projects.onCurrentProjectChange`)
+  projectChangeListeners.forEach((cb) => cb({ projectId }));
+
+  // Also emit the backend `project-changed` event so the full reset+reload
+  // pipeline runs end-to-end in dev mode.
+  const project = projectId ? MOCK_PROJECTS[projectId] : null;
+  const info = {
+    projectId: project?.id ?? null,
+    projectName: project?.name ?? null,
+  };
+  const listeners = eventListeners.get('project-changed') || [];
+  listeners.forEach((cb) => cb(info));
+
+  console.log(
+    'Mock: Notified',
+    projectChangeListeners.length,
+    'frontend project listeners and',
+    listeners.length,
+    'backend project-changed listeners',
+  );
 }
