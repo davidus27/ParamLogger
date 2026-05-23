@@ -1,8 +1,8 @@
 <template>
-  <div id="param-inventory-root" class="inv-app">
+  <div id="param-logger-root" class="inv-app">
     <!-- ───── Header ───── -->
     <header class="inv-header">
-      <span class="inv-logo">◆ Param Inventory</span>
+      <span class="inv-logo">◆ Param Logger</span>
       <span class="inv-sep"></span>
       <div class="inv-search">
         <span class="inv-search-icon">⌕</span>
@@ -293,8 +293,8 @@ import type {
   InventoryBackendAPI,
   InventoryBackendEvents,
   Parameter,
-} from '@param-inventory/shared';
-import { ParameterLocation } from '@param-inventory/shared';
+} from '@param-logger/shared';
+import { ParameterLocation } from '@param-logger/shared';
 import { useInventory } from '../composables/useInventory';
 import { useBackend } from '../composables/useBackend';
 import { useScope } from '../composables/useScope';
@@ -423,7 +423,7 @@ watch(
     activeFlags.interesting = false;
     activeFlags.new = false;
     openDomains.clear();
-    console.info('[Param Inventory] project changed, cleared UI selection', {
+    console.info('[Param Logger] project changed, cleared UI selection', {
       from: oldId ?? null,
       to: newId ?? null,
     });
@@ -445,7 +445,7 @@ watch(currentScope, async (newScope, oldScope) => {
   activeFlags.interesting = false;
   activeFlags.new = false;
 
-  console.info('[Param Inventory] scope changed, refreshing results', {
+  console.info('[Param Logger] scope changed, refreshing results', {
     from: oldScope?.name ?? null,
     to: newScope?.name ?? null,
   });
@@ -458,13 +458,13 @@ watch(currentScope, async (newScope, oldScope) => {
       setLoading(true);
       await refreshInventory();
     } catch (error) {
-      console.warn('[Param Inventory] Failed to refresh inventory after scope change:', error);
+      console.warn('[Param Logger] Failed to refresh inventory after scope change:', error);
     } finally {
       setLoading(false);
     }
   }
 
-  console.info('[Param Inventory] scope filter result', {
+  console.info('[Param Logger] scope filter result', {
     scope: newScope,
     scoped: scopedParameterCount.value,
     total: parameters.value.length,
@@ -525,37 +525,127 @@ function exportWordlist(): void {
   copyText(names);
 }
 
-// Build an HTTPQL query that scopes HTTP History to requests carrying this parameter.
+// Escape a literal string for embedding inside a double-quoted HTTPQL value
+// (backslashes and double quotes need escaping).
+function escapeHttpQLString(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+// Escape a literal string so it can be embedded inside a Rust-flavoured regex
+// (used by HTTPQL `regex`/`nregex` operators) and matched as plain text.
+function escapeRegexLiteral(s: string): string {
+  return s.replace(/[\\^$.|?*+()[\]{}]/g, '\\$&');
+}
+
+// Build a Rust-flavoured regex that matches exactly the parameter's normalized
+// path, treating placeholders like `{id}`, `{uuid}`, `{hash}` as a single
+// path segment (`[^/]+`). Anchored with `^…$` so we don't pick up sibling or
+// child endpoints the way `req.path.cont` did.
+function buildPathRegex(normalizedPath: string): string {
+  const segments = normalizedPath.split('/');
+  const escapedSegments = segments.map((segment) => {
+    if (segment.length === 0) return '';
+    if (/^\{[^}]+\}$/.test(segment)) {
+      return '[^/]+';
+    }
+    return escapeRegexLiteral(segment);
+  });
+  return `^${escapedSegments.join('/')}$`;
+}
+
+// Return the leaf key of a flattened JSON parameter name, i.e. the segment that
+// will actually appear (quoted) in the raw JSON body. The parser produces names
+// like `user.name`, `users[].name`, `data.items[0].id` — only the last key is
+// present in the body, so that's what we match against.
+function jsonLeafKey(name: string): string {
+  let s = name.replace(/\[\d*\]+$/, '');
+  const dotIdx = s.lastIndexOf('.');
+  if (dotIdx >= 0) s = s.slice(dotIdx + 1);
+  s = s.replace(/\[\d*\]$/, '');
+  return s;
+}
+
+// Build an HTTPQL query that scopes HTTP History to requests carrying this
+// parameter. The query is intentionally conservative: every clause is anchored
+// (regex or exact-match) so the count in HTTP History agrees with the
+// per-parameter `count` we display in the inventory.
 function buildHttpQLForParameter(p: Parameter): string {
-  const escape = (s: string): string => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   const parts: string[] = [];
 
-  parts.push(`req.host.eq:"${escape(p.domain)}"`);
-  parts.push(`req.method.eq:"${escape(p.method)}"`);
+  // Host. Caido's `req.host` is the raw `Host:` header value, which may include
+  // a `:<port>` suffix. Match either form, case-insensitively (hostnames are
+  // case-insensitive per RFC 3986), so a request to `Example.com:8080` still
+  // resolves to a parameter we stored under `example.com`.
+  parts.push(
+    `req.host.regex:"${escapeHttpQLString(`(?i)^${escapeRegexLiteral(p.domain)}(?::\\d+)?$`)}"`,
+  );
 
-  // Static path prefix only (drop placeholders like {id} so the filter still matches).
-  const staticPath = p.normalizedPath.split('{')[0].replace(/\/+$/, '');
-  if (staticPath) {
-    parts.push(`req.path.cont:"${escape(staticPath)}"`);
-  }
+  parts.push(`req.method.eq:"${escapeHttpQLString(p.method)}"`);
+
+  // Path: anchored regex with placeholders → `[^/]+`, so an inventory row for
+  // `/api/users/{id}/profile` doesn't also match `/api/users` or
+  // `/api/users/123/settings` the way `req.path.cont:"/api/users"` did.
+  parts.push(
+    `req.path.regex:"${escapeHttpQLString(buildPathRegex(p.normalizedPath))}"`,
+  );
+
+  const nameLit = escapeRegexLiteral(p.name);
 
   switch (p.location) {
     case ParameterLocation.QUERY:
-      parts.push(`req.query.cont:"${escape(p.name)}="`);
+      // `req.query` excludes the leading `?`, so a parameter at the start of
+      // the query string has nothing before it, and any other parameter is
+      // preceded by `&`. Anchor accordingly so `id` doesn't match `userid`.
+      parts.push(
+        `req.query.regex:"${escapeHttpQLString(`(?:^|&)${nameLit}=`)}"`,
+      );
       break;
-    case ParameterLocation.JSON:
     case ParameterLocation.FORM:
+      parts.push(
+        `req.body.regex:"${escapeHttpQLString(`(?:^|&)${nameLit}=`)}"`,
+      );
+      break;
+    case ParameterLocation.JSON: {
+      // The parser flattens nested keys to dot/bracket notation (e.g.
+      // `user.name`), but the raw JSON body only contains the leaf key in
+      // quotes. Match `"<leaf>"\s*:` so we hit a JSON key rather than any
+      // substring with the same characters.
+      const leafLit = escapeRegexLiteral(jsonLeafKey(p.name));
+      parts.push(
+        `req.body.regex:"${escapeHttpQLString(`"${leafLit}"\\s*:`)}"`,
+      );
+      break;
+    }
     case ParameterLocation.MULTIPART:
-      parts.push(`req.body.cont:"${escape(p.name)}"`);
+      // Each multipart field has a `Content-Disposition: form-data; name="<n>"`
+      // header. That's the most reliable place to look.
+      parts.push(
+        `req.body.regex:"${escapeHttpQLString(`name="${nameLit}"`)}"`,
+      );
       break;
     case ParameterLocation.HEADER:
-      parts.push(`req.raw.cont:"${escape(p.name)}:"`);
+      // Match the header at the start of a line via Rust's `(?m)` multi-line
+      // mode so we don't also match the same word appearing inside another
+      // header's value (e.g. a UA string or a referrer URL). HTTP header names
+      // are case-insensitive (RFC 9110), and HTTP/2 traffic is stored with
+      // lower-cased header names in `req.raw`, so we must also match
+      // case-insensitively — otherwise a parameter the inventory normalised to
+      // `Origin` won't match the literal `origin:` bytes on the wire.
+      parts.push(
+        `req.raw.regex:"${escapeHttpQLString(`(?im)^${nameLit}:`)}"`,
+      );
       break;
     case ParameterLocation.COOKIE:
-      parts.push(`req.raw.cont:"${escape(p.name)}="`);
+      // Anchor inside the `Cookie:` header. The `Cookie` token itself is
+      // case-insensitive (and lower-cased in HTTP/2 raw), but the cookie name
+      // is case-sensitive, so we scope the `(?i)` flag to just the prefix via
+      // an inline group. `\b` keeps `id` from matching `userid=`.
+      parts.push(
+        `req.raw.regex:"${escapeHttpQLString(`(?i:cookie):[^\\r\\n]*\\b${nameLit}=`)}"`,
+      );
       break;
     case ParameterLocation.PATH:
-      // Already constrained by host/method/path prefix above.
+      // The path regex above already constrains this case exactly.
       break;
   }
 

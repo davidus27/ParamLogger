@@ -1,7 +1,7 @@
 {
-  "name": "caido-param-inventory",
+  "name": "caido-param-logger",
   "version": "0.1.0",
-  "description": "Caido Parameter Inventory Plugin",
+  "description": "Caido Param Logger Plugin",
   "private": true,
   "scripts": {
     "build": "caido-dev build",

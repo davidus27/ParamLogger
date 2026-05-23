@@ -1,6 +1,6 @@
-# Caido Parameter Inventory
+# Caido Param Logger
 
-Caido Parameter Inventory is a Caido plugin concept for turning observed HTTP traffic into a searchable parameter map.
+Caido Param Logger is a Caido plugin concept for turning observed HTTP traffic into a searchable parameter map.
 
 The current product direction is captured directly in [`preview.html`](preview.html). Open that file in a browser to see the intended plugin experience: a Caido-style workspace with a target tree, parameter table, location filters, interesting/new flags, a detail drawer, request actions, and wordlist export.
 
@@ -303,4 +303,4 @@ A useful first version should let the tester:
 
 ## Name
 
-The working name is **Caido Parameter Inventory**. The preview uses the shorter UI label **Param Inventory**.
+The working name is **Caido Param Logger**. The preview uses the shorter UI label **Param Logger**.

@@ -1,12 +1,12 @@
 import type { Request } from '@caido/sdk-backend';
-import type { ParsedParameter, ParsedRequest } from '@param-inventory/shared';
+import type { ParsedParameter, ParsedRequest } from '@param-logger/shared';
 import {
   ParameterLocation,
   EXCLUDED_HEADERS,
   JSON_CONTENT_TYPES,
   FORM_CONTENT_TYPES,
   MULTIPART_CONTENT_TYPES,
-} from '@param-inventory/shared';
+} from '@param-logger/shared';
 
 /**
  * Parse all parameters from a Caido request and return complete ParsedRequest object

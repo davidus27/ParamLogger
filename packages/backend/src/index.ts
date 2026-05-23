@@ -1,5 +1,5 @@
 /**
- * Backend plugin entry point for Parameter Inventory
+ * Backend plugin entry point for Param Logger
  */
 
 import type { Caido, Request, Project } from "@caido/sdk-backend";
@@ -10,7 +10,7 @@ import type {
   InventoryFilters,
   ParameterLocation,
   ProjectInfo,
-} from "@param-inventory/shared";
+} from "@param-logger/shared";
 import {
   ValueType,
   Flag,
@@ -19,11 +19,11 @@ import {
   FILE_NAME_PATTERNS,
   AUTH_NAME_PATTERNS,
   NEW_PARAMETER_THRESHOLD_MS,
-} from "@param-inventory/shared";
+} from "@param-logger/shared";
 
 import { parseRequest } from "./parser.js";
 
-const BUILD_TAG = "param-inventory backend build 2026-05-20b";
+const BUILD_TAG = "param-logger backend build 2026-05-20b";
 
 // In-memory store. Cleared whenever the active Caido project changes so that
 // parameters from a previous project never leak into a new project's view.
@@ -50,7 +50,7 @@ let scanGeneration = 0;
  * Initialize the parameter inventory plugin
  */
 export function init(sdk: Caido): void {
-  console.log(`[param-inventory] init() — ${BUILD_TAG}`);
+  console.log(`[param-logger] init() — ${BUILD_TAG}`);
 
   registerRpc(sdk);
   setupEventCoalescing(sdk);
@@ -80,7 +80,7 @@ async function bootstrapInitialProject(sdk: Caido): Promise<void> {
     const project = (await sdk.projects.getCurrent?.()) ?? null;
     await handleProjectChange(sdk, project);
   } catch (error) {
-    console.error("[param-inventory] failed to read initial project:", error);
+    console.error("[param-logger] failed to read initial project:", error);
     // Fall back to scanning whatever Caido currently exposes.
     await runHistoricalScan(sdk, ++scanGeneration);
   }
@@ -120,7 +120,7 @@ async function handleProjectChange(
   currentProjectId = projectId;
 
   console.log(
-    `[param-inventory] project changed → ${projectName ?? "(none)"} (id=${projectId ?? "null"})`,
+    `[param-logger] project changed → ${projectName ?? "(none)"} (id=${projectId ?? "null"})`,
   );
 
   // Bump generation so any in-flight historical scan stops writing results.
@@ -132,7 +132,7 @@ async function handleProjectChange(
   try {
     sdk.api.send("project-changed", info);
   } catch (error) {
-    console.error("[param-inventory] failed to send project-changed event:", error);
+    console.error("[param-logger] failed to send project-changed event:", error);
   }
 
   // Always emit a zeroed stats update so the frontend immediately reflects the
@@ -146,7 +146,7 @@ async function handleProjectChange(
     });
     lastStats = { totalRequests: 0, uniqueParams: 0, domains: 0 };
   } catch (error) {
-    console.error("[param-inventory] failed to send stats reset:", error);
+    console.error("[param-logger] failed to send stats reset:", error);
   }
 
   if (project) {
@@ -233,7 +233,7 @@ function ingest(sdk: Caido, request: Request): void {
 
     if (totalRequests <= 5 || totalRequests % 100 === 0) {
       console.log(
-        `[param-inventory] ingest #${totalRequests} ` +
+        `[param-logger] ingest #${totalRequests} ` +
           `${parsedRequest.method} ${parsedRequest.domain}${parsedRequest.normalizedPath} ` +
           `params=${parsedRequest.parameters.length}`,
       );
@@ -242,14 +242,24 @@ function ingest(sdk: Caido, request: Request): void {
     // Update domain count
     const domainCount = domains.get(parsedRequest.domain) || 0;
     domains.set(parsedRequest.domain, domainCount + 1);
-    
+
+    // Track which parameter ids have already been counted for THIS request so a
+    // single request that repeats the same parameter (e.g. duplicate query keys
+    // like `?id=1&id=2` or multi-value headers) only contributes `+1` to the
+    // parameter's `count`. The displayed semantics is "number of requests where
+    // this parameter was seen", which must match what the HTTP History filter
+    // returns when the user clicks "View in HTTP History".
+    const countedThisRequest = new Set<string>();
+
     // Process each parameter
     for (const parsedParam of parsedRequest.parameters) {
       const id = `${parsedRequest.domain}:${parsedRequest.method}:${parsedRequest.normalizedPath}:${parsedParam.location}:${parsedParam.name}`;
-      
+      const alreadyCountedThisRequest = countedThisRequest.has(id);
+      countedThisRequest.add(id);
+
       let parameter = parameters.get(id);
       const now = parsedRequest.timestamp;
-      
+
       if (!parameter) {
         // New parameter - compute static flags once
         const valueType = classifyValue(parsedParam.value);
@@ -269,17 +279,19 @@ function ingest(sdk: Caido, request: Request): void {
           firstSeen: now,
           lastSeen: now,
         };
-        
+
         parameters.set(id, parameter);
         pendingParameterIds.add(id);
       } else {
         // Existing parameter - update it
         const valueType = classifyValue(parsedParam.value);
         const wasChanged = parameter.count === 1; // Track if this causes notable changes
-        
-        parameter.count++;
+
+        if (!alreadyCountedThisRequest) {
+          parameter.count++;
+        }
         parameter.lastSeen = now;
-        
+
         // Add value type if not seen before
         if (!parameter.valueTypes.includes(valueType)) {
           parameter.valueTypes.push(valueType);
@@ -419,7 +431,7 @@ function recomputeNewFlag(flags: Flag[], firstSeen: Date): Flag[] {
  * inventory.
  */
 async function runHistoricalScan(sdk: Caido, generation: number): Promise<void> {
-  console.log(`[param-inventory] starting historical scan (gen=${generation})...`);
+  console.log(`[param-logger] starting historical scan (gen=${generation})...`);
 
   const startTime = Date.now();
   let processedCount = 0;
@@ -434,7 +446,7 @@ async function runHistoricalScan(sdk: Caido, generation: number): Promise<void> 
 
     while (hasMore) {
       if (generation !== scanGeneration) {
-        console.log(`[param-inventory] aborting stale scan (gen=${generation}, current=${scanGeneration})`);
+        console.log(`[param-logger] aborting stale scan (gen=${generation}, current=${scanGeneration})`);
         return;
       }
 
@@ -455,7 +467,7 @@ async function runHistoricalScan(sdk: Caido, generation: number): Promise<void> 
       // If the project changed while we awaited the page, abort before
       // applying any results so they aren't attributed to the new project.
       if (generation !== scanGeneration) {
-        console.log(`[param-inventory] aborting stale scan after fetch (gen=${generation}, current=${scanGeneration})`);
+        console.log(`[param-logger] aborting stale scan after fetch (gen=${generation}, current=${scanGeneration})`);
         return;
       }
 
@@ -492,7 +504,7 @@ async function runHistoricalScan(sdk: Caido, generation: number): Promise<void> 
 
     const duration = Date.now() - startTime;
     console.log(
-      `[param-inventory] historical scan done: ${processedCount} requests, ` +
+      `[param-logger] historical scan done: ${processedCount} requests, ` +
         `${parameters.size} unique params, ${domains.size} domains in ${duration}ms`,
     );
 
@@ -583,7 +595,7 @@ function registerRpc(sdk: Caido): void {
         projectName: project ? safeCall(() => project.getName(), null) : null,
       };
     } catch (error) {
-      console.error('[param-inventory] getCurrentProject failed:', error);
+      console.error('[param-logger] getCurrentProject failed:', error);
       return { projectId: null, projectName: null };
     }
   });
@@ -606,7 +618,7 @@ function registerRpc(sdk: Caido): void {
       }
       return { ok: true };
     } catch (error) {
-      console.error('[param-inventory] resetAndRescan failed:', error);
+      console.error('[param-logger] resetAndRescan failed:', error);
       return { ok: false };
     }
   });

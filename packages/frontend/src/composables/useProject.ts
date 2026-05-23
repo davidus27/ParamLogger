@@ -1,6 +1,6 @@
 import { ref, type Ref } from 'vue';
 import type { Caido } from '@caido/sdk-frontend';
-import type { InventoryBackendAPI, InventoryBackendEvents, ProjectInfo } from '@param-inventory/shared';
+import type { InventoryBackendAPI, InventoryBackendEvents, ProjectInfo } from '@param-logger/shared';
 
 // Caido emits an event with the new project id when the user switches projects
 // (or undefined when no project is active).
@@ -33,13 +33,13 @@ export function useProject() {
 
       if (!projectChangeListener) {
         console.warn(
-          '[Param Inventory] projects.onCurrentProjectChange is not available on this Caido version; project changes will not refresh the view.',
+          '[Param Logger] projects.onCurrentProjectChange is not available on this Caido version; project changes will not refresh the view.',
         );
       } else {
-        console.info('[Param Inventory] project listener installed');
+        console.info('[Param Logger] project listener installed');
       }
     } catch (error) {
-      console.warn('[Param Inventory] Failed to subscribe to project changes:', error);
+      console.warn('[Param Logger] Failed to subscribe to project changes:', error);
     }
 
     // Pull the initial project from the backend RPC. The frontend SDK doesn't
@@ -48,9 +48,9 @@ export function useProject() {
     try {
       const initial = await caido.backend.getCurrentProject();
       currentProject.value = initial;
-      console.info('[Param Inventory] initial project =', initial);
+      console.info('[Param Logger] initial project =', initial);
     } catch (error) {
-      console.warn('[Param Inventory] Failed to read initial project from backend:', error);
+      console.warn('[Param Logger] Failed to read initial project from backend:', error);
       currentProject.value = { projectId: null, projectName: null };
     }
   }
@@ -67,9 +67,9 @@ export function useProject() {
     try {
       const info = await caido.backend.getCurrentProject();
       currentProject.value = info;
-      console.info('[Param Inventory] project changed →', info);
+      console.info('[Param Logger] project changed →', info);
     } catch (error) {
-      console.warn('[Param Inventory] Failed to resolve project info:', error);
+      console.warn('[Param Logger] Failed to resolve project info:', error);
     }
   }
 
@@ -77,7 +77,7 @@ export function useProject() {
   // directly — bypasses the extra RPC round-trip.
   function setFromBackendEvent(info: ProjectInfo) {
     currentProject.value = info;
-    console.info('[Param Inventory] project (from backend event) →', info);
+    console.info('[Param Logger] project (from backend event) →', info);
   }
 
   function cleanup() {

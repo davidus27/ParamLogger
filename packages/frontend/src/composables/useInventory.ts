@@ -1,5 +1,5 @@
 import { reactive, readonly, computed, ref, shallowRef } from 'vue';
-import type { Parameter, Domain, InventoryStats } from '@param-inventory/shared';
+import type { Parameter, Domain, InventoryStats } from '@param-logger/shared';
 
 // Internal storage: Map for fast lookups and updates
 const parametersMap = new Map<string, Parameter>();

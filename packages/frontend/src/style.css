@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────
-   Parameter Inventory — UI styles
+   Param Logger — UI styles
    Uses Caido design tokens (--c-bg-*, --c-fg-*, --c-border-*).
    Provides sane fallbacks so the plugin is also fully readable
    when rendered outside the Caido shell (dev / preview).
@@ -53,7 +53,7 @@
 }
 
 /* ───── Root container ───── */
-#param-inventory-root {
+#param-logger-root {
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
   background: var(--c-bg-default);
   color: var(--c-fg-default);
@@ -66,9 +66,9 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-#param-inventory-root *,
-#param-inventory-root *::before,
-#param-inventory-root *::after {
+#param-logger-root *,
+#param-logger-root *::before,
+#param-logger-root *::after {
   box-sizing: border-box;
 }
 
@@ -988,36 +988,36 @@ thead th {
 }
 
 /* ───── Scrollbars ───── */
-#param-inventory-root ::-webkit-scrollbar {
+#param-logger-root ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-#param-inventory-root ::-webkit-scrollbar-track {
+#param-logger-root ::-webkit-scrollbar-track {
   background: transparent;
 }
 
-#param-inventory-root ::-webkit-scrollbar-thumb {
+#param-logger-root ::-webkit-scrollbar-thumb {
   background: var(--c-border-default);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
-#param-inventory-root ::-webkit-scrollbar-thumb:hover {
+#param-logger-root ::-webkit-scrollbar-thumb:hover {
   background: var(--c-border-strong);
   background-clip: padding-box;
   border: 2px solid transparent;
 }
 
 /* Firefox scrollbar */
-#param-inventory-root {
+#param-logger-root {
   scrollbar-color: var(--c-border-default) transparent;
   scrollbar-width: thin;
 }
 
 /* ───── Selection ───── */
-#param-inventory-root ::selection {
+#param-logger-root ::selection {
   background: rgba(217, 74, 106, 0.35);
   color: var(--c-fg-default);
 }

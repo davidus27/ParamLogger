@@ -14,7 +14,7 @@ importers:
 
   packages/backend:
     dependencies:
-      '@param-inventory/shared':
+      '@param-logger/shared':
         specifier: workspace:*
         version: link:../shared
     devDependencies:
@@ -27,7 +27,7 @@ importers:
 
   packages/frontend:
     dependencies:
-      '@param-inventory/shared':
+      '@param-logger/shared':
         specifier: workspace:*
         version: link:../shared
       vue:

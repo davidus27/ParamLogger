@@ -1,7 +1,7 @@
 {
-  "name": "@param-inventory/frontend",
+  "name": "@param-logger/frontend",
   "version": "0.1.0",
-  "description": "Frontend plugin for Parameter Inventory",
+  "description": "Frontend plugin for Param Logger",
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
@@ -9,7 +9,7 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@param-inventory/shared": "workspace:*",
+    "@param-logger/shared": "workspace:*",
     "vue": "^3.4.0",
     "vue-virtual-scroller": "^2.0.1"
   },

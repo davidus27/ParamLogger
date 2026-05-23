@@ -3,8 +3,8 @@
  */
 
 import type { Caido } from '@caido/sdk-frontend';
-import type { InventoryBackendAPI, InventoryBackendEvents, Parameter, Domain, InventoryStats } from '@param-inventory/shared';
-import { ParameterLocation, ValueType, Flag } from '@param-inventory/shared';
+import type { InventoryBackendAPI, InventoryBackendEvents, Parameter, Domain, InventoryStats } from '@param-logger/shared';
+import { ParameterLocation, ValueType, Flag } from '@param-logger/shared';
 
 // Mock implementations of the backend API methods
 const MOCK_PARAMETERS: Parameter[] = [
@@ -242,19 +242,19 @@ export const mockCaido: Caido<InventoryBackendAPI, InventoryBackendEvents> = {
   storage: {
     get: async (key: string) => {
       console.log('Mock: Getting storage value for key', key);
-      return localStorage.getItem(`caido-param-inventory-${key}`);
+      return localStorage.getItem(`caido-param-logger-${key}`);
     },
     set: async (key: string, value: any) => {
       console.log('Mock: Setting storage value for key', key, value);
-      localStorage.setItem(`caido-param-inventory-${key}`, JSON.stringify(value));
+      localStorage.setItem(`caido-param-logger-${key}`, JSON.stringify(value));
     },
     delete: async (key: string) => {
       console.log('Mock: Deleting storage value for key', key);
-      localStorage.removeItem(`caido-param-inventory-${key}`);
+      localStorage.removeItem(`caido-param-logger-${key}`);
     },
     getKeys: async () => {
       console.log('Mock: Getting all storage keys');
-      return Object.keys(localStorage).filter(k => k.startsWith('caido-param-inventory-'));
+      return Object.keys(localStorage).filter(k => k.startsWith('caido-param-logger-'));
     }
   },
 

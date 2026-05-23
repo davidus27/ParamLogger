@@ -1,11 +1,11 @@
 {
-  "name": "@param-inventory/backend",
+  "name": "@param-logger/backend",
   "version": "0.1.0",
-  "description": "Backend plugin for Parameter Inventory",
+  "description": "Backend plugin for Param Logger",
   "type": "module",
   "main": "src/index.ts",
   "dependencies": {
-    "@param-inventory/shared": "workspace:*"
+    "@param-logger/shared": "workspace:*"
   },
   "devDependencies": {
     "@caido/sdk-backend": "^0.56.2",

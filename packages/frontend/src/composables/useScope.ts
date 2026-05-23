@@ -23,7 +23,7 @@ function readCurrentScope(): Scope | undefined {
   try {
     return caido.scopes.getCurrentScope() as Scope | undefined;
   } catch (error) {
-    console.warn('[Param Inventory] Failed to read current scope:', error);
+    console.warn('[Param Logger] Failed to read current scope:', error);
     return undefined;
   }
 }
@@ -41,7 +41,7 @@ export function useScope() {
     // the console during the project-change retry burst (which fires the
     // refresh up to three times in 500ms).
     if (prev?.id !== next?.id) {
-      console.info(`[Param Inventory] scope refreshed (${reason}) →`, next);
+      console.info(`[Param Logger] scope refreshed (${reason}) →`, next);
     }
     return next;
   }
@@ -50,7 +50,7 @@ export function useScope() {
     caido = caidoInstance;
 
     if (!caido.scopes) {
-      console.warn('[Param Inventory] Caido SDK does not expose scopes API; scope filtering disabled.');
+      console.warn('[Param Logger] Caido SDK does not expose scopes API; scope filtering disabled.');
       currentScope.value = undefined;
       return;
     }
@@ -70,12 +70,12 @@ export function useScope() {
       ) ?? null;
 
       if (!scopeChangeListener) {
-        console.warn('[Param Inventory] scopes.onCurrentScopeChange is not available on this Caido version; scope changes will not refresh the view.');
+        console.warn('[Param Logger] scopes.onCurrentScopeChange is not available on this Caido version; scope changes will not refresh the view.');
       } else {
-        console.info('[Param Inventory] scope listener installed');
+        console.info('[Param Logger] scope listener installed');
       }
     } catch (error) {
-      console.warn('[Param Inventory] Failed to subscribe to scope changes:', error);
+      console.warn('[Param Logger] Failed to subscribe to scope changes:', error);
     }
 
     // Scopes are project-scoped, so we ALSO listen for project changes here:
@@ -97,10 +97,10 @@ export function useScope() {
       ) ?? null;
 
       if (projectChangeListener) {
-        console.info('[Param Inventory] scope: project listener installed');
+        console.info('[Param Logger] scope: project listener installed');
       }
     } catch (error) {
-      console.warn('[Param Inventory] Failed to subscribe to project changes for scope refresh:', error);
+      console.warn('[Param Logger] Failed to subscribe to project changes for scope refresh:', error);
     }
 
     // `getCurrentScope()` returns the Scope object itself (not an id).

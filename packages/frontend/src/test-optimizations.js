@@ -3,7 +3,7 @@
  */
 
 import { mockCaido } from './mock-caido-sdk.ts';
-import { ParameterLocation, ValueType, Flag } from '@param-inventory/shared';
+import { ParameterLocation, ValueType, Flag } from '@param-logger/shared';
 
 // Generate a large dataset for performance testing
 function generateLargeDataset(size = 1000) {

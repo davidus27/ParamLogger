@@ -1,13 +1,13 @@
 import { createApp } from 'vue';
 import App from './views/App.vue';
 import type { Caido } from '@caido/sdk-frontend';
-import type { InventoryBackendAPI, InventoryBackendEvents } from '@param-inventory/shared';
+import type { InventoryBackendAPI, InventoryBackendEvents } from '@param-logger/shared';
 
 import './style.css';
 
 export function init(caido: Caido<InventoryBackendAPI, InventoryBackendEvents>): void {
   const container = document.createElement("div");
-  container.id = "param-inventory-root";
+  container.id = "param-logger-root";
   container.style.width = "100%";
   container.style.height = "100%";
 
@@ -15,11 +15,11 @@ export function init(caido: Caido<InventoryBackendAPI, InventoryBackendEvents>):
   app.provide('caido', caido);
   app.mount(container);
 
-  caido.navigation.addPage("/param-inventory", {
+  caido.navigation.addPage("/param-logger", {
     body: container
   });
 
-  caido.sidebar.registerItem("Parameter Inventory", "/param-inventory", {
+  caido.sidebar.registerItem("Param Logger", "/param-logger", {
     icon: "fas fa-list"
   });
 }

@@ -7,7 +7,7 @@ import type {
   Parameter,
   InventoryStats,
   ProjectInfo,
-} from '@param-inventory/shared';
+} from '@param-logger/shared';
 import { useInventory } from './useInventory';
 import { useProject } from './useProject';
 import { useScope } from './useScope';
@@ -62,7 +62,7 @@ export function useBackend() {
     // caches immediately so the user never sees parameters from the previous
     // project, then reload everything from the (now-rescanning) backend.
     caido.backend.onEvent('project-changed', (info: ProjectInfo) => {
-      console.info('[Param Inventory] backend project-changed', info);
+      console.info('[Param Logger] backend project-changed', info);
       setProjectFromBackendEvent(info);
       // Scopes are project-scoped — the backend emits this event after the
       // project transition has settled, so re-reading the active scope here

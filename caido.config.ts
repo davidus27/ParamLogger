@@ -1,9 +1,9 @@
 import { defineConfig } from "@caido-community/dev";
 
 export default defineConfig({
-  id: "param-inventory",
-  name: "Parameter Inventory",
-  description: "Passively inventories HTTP parameters from proxied traffic into a searchable parameter map",
+  id: "param-logger",
+  name: "Param Logger",
+  description: "Passively logs HTTP parameters from proxied traffic into a searchable parameter map",
   version: "0.1.0",
   author: {
     name: "David Drobny",
@@ -12,17 +12,17 @@ export default defineConfig({
   plugins: [
     {
       kind: "frontend",
-      id: "param-inventory-frontend",
-      name: "Parameter Inventory Frontend",
+      id: "param-logger-frontend",
+      name: "Param Logger Frontend",
       root: "packages/frontend",
       backend: {
-        id: "param-inventory-backend",
+        id: "param-logger-backend",
       },
     },
     {
       kind: "backend",
-      id: "param-inventory-backend",
-      name: "Parameter Inventory Backend",
+      id: "param-logger-backend",
+      name: "Param Logger Backend",
       root: "packages/backend",
     },
   ],
