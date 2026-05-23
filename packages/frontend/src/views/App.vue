@@ -87,83 +87,89 @@
     <!-- ───── Main panel (right) ───── -->
     <main class="inv-main">
       <div class="inv-filter-bar">
-        <span class="inv-filter-label">Location</span>
-        <span
-          v-for="loc in locationFilters"
-          :key="loc.value"
-          class="inv-pill"
-          :class="{ on: activeLoc === loc.value }"
-          @click="activeLoc = loc.value"
-        >{{ loc.label }}</span>
+        <div class="inv-filter-group">
+          <span class="inv-filter-label">Location</span>
+          <span
+            v-for="loc in locationFilters"
+            :key="loc.value"
+            class="inv-pill"
+            :class="{ on: activeLoc === loc.value }"
+            @click="activeLoc = loc.value"
+          >{{ loc.label }}</span>
+        </div>
         <span class="inv-filter-sep"></span>
-        <span class="inv-filter-label">Flags</span>
-        <span
-          class="inv-pill"
-          :class="{ on: activeFlags.has('file') }"
-          @click="toggleFlag('file')"
-        >file</span>
-        <span
-          class="inv-pill"
-          :class="{ on: activeFlags.has('sensitive') }"
-          @click="toggleFlag('sensitive')"
-        >sensitive</span>
-        <span
-          class="inv-pill"
-          :class="{ on: activeFlags.has('auth') }"
-          @click="toggleFlag('auth')"
-        >auth</span>
-        <span
-          class="inv-pill"
-          :class="{ on: activeFlags.has('redirect') }"
-          @click="toggleFlag('redirect')"
-        >redirect</span>
-        <span
-          class="inv-pill"
-          :class="{ on: activeFlags.has('new') }"
-          @click="toggleFlag('new')"
-        >new</span>
+        <div class="inv-filter-group">
+          <span class="inv-filter-label">Flags</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeFlags.has('file') }"
+            @click="toggleFlag('file')"
+          >file</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeFlags.has('sensitive') }"
+            @click="toggleFlag('sensitive')"
+          >sensitive</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeFlags.has('auth') }"
+            @click="toggleFlag('auth')"
+          >auth</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeFlags.has('redirect') }"
+            @click="toggleFlag('redirect')"
+          >redirect</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeFlags.has('new') }"
+            @click="toggleFlag('new')"
+          >new</span>
+        </div>
         <span class="inv-filter-sep"></span>
-        <span class="inv-filter-label">Value type</span>
-        <span
-          class="inv-pill"
-          :class="{ on: activeValueTypes.has(ValueType.JWT) }"
-          @click="toggleValueType(ValueType.JWT)"
-        >jwt</span>
-        <span
-          class="inv-pill"
-          :class="{ on: activeValueTypes.has(ValueType.URL) }"
-          @click="toggleValueType(ValueType.URL)"
-        >url</span>
-        <span
-          class="inv-pill"
-          :class="{ on: activeValueTypes.has(ValueType.EMAIL) }"
-          @click="toggleValueType(ValueType.EMAIL)"
-        >email</span>
-        <span
-          class="inv-pill"
-          :class="{ on: activeValueTypes.has(ValueType.UUID) }"
-          @click="toggleValueType(ValueType.UUID)"
-        >uuid</span>
-        <span
-          class="inv-pill"
-          :class="{ on: activeValueTypes.has(ValueType.BASE64) }"
-          @click="toggleValueType(ValueType.BASE64)"
-        >base64</span>
-        <span
-          class="inv-pill"
-          :class="{ on: activeValueTypes.has(ValueType.HASH) }"
-          @click="toggleValueType(ValueType.HASH)"
-        >hash</span>
-        <span
-          class="inv-pill"
-          :class="{ on: activeValueTypes.has(ValueType.INTEGER) }"
-          @click="toggleValueType(ValueType.INTEGER)"
-        >integer</span>
-        <span
-          class="inv-pill"
-          :class="{ on: activeValueTypes.has(ValueType.BOOLEAN) }"
-          @click="toggleValueType(ValueType.BOOLEAN)"
-        >boolean</span>
+        <div class="inv-filter-group">
+          <span class="inv-filter-label">Value type</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeValueTypes.has(ValueType.JWT) }"
+            @click="toggleValueType(ValueType.JWT)"
+          >jwt</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeValueTypes.has(ValueType.URL) }"
+            @click="toggleValueType(ValueType.URL)"
+          >url</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeValueTypes.has(ValueType.EMAIL) }"
+            @click="toggleValueType(ValueType.EMAIL)"
+          >email</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeValueTypes.has(ValueType.UUID) }"
+            @click="toggleValueType(ValueType.UUID)"
+          >uuid</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeValueTypes.has(ValueType.BASE64) }"
+            @click="toggleValueType(ValueType.BASE64)"
+          >base64</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeValueTypes.has(ValueType.HASH) }"
+            @click="toggleValueType(ValueType.HASH)"
+          >hash</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeValueTypes.has(ValueType.INTEGER) }"
+            @click="toggleValueType(ValueType.INTEGER)"
+          >integer</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeValueTypes.has(ValueType.BOOLEAN) }"
+            @click="toggleValueType(ValueType.BOOLEAN)"
+          >boolean</span>
+        </div>
       </div>
 
       <div class="inv-table-wrap">
@@ -304,8 +310,8 @@
             <span class="v">{{ selectedParam.valueTypes.join(', ') }}</span>
           </div>
           <div class="d-row">
-            <span class="k">First seen</span>
-            <span class="v">{{ formatDate(selectedParam.firstSeen) }}</span>
+            <span class="k">Seen</span>
+            <span class="v">{{ selectedParam.count }}× (first {{ formatDate(selectedParam.firstSeen) }})</span>
           </div>
           <div class="d-row">
             <span class="k">Last seen</span>
@@ -323,6 +329,49 @@
             </span>
           </div>
         </section>
+
+        <!-- Attack surface hints -->
+        <section v-if="attackHints.length" class="d-section d-hints">
+          <h4>Attack surface</h4>
+          <div
+            v-for="hint in attackHints"
+            :key="hint.label"
+            class="d-hint-row"
+          >
+            <span class="hint-icon">{{ hint.icon }}</span>
+            <span class="hint-body">
+              <strong>{{ hint.label }}</strong>
+              <span class="hint-desc">{{ hint.desc }}</span>
+            </span>
+          </div>
+        </section>
+
+        <!-- Create Finding form -->
+        <section v-if="showFindingForm" class="d-section d-finding-form">
+          <h4>Create finding</h4>
+          <input
+            v-model="findingTitle"
+            class="d-input"
+            placeholder="Title (e.g. Reflected param – open redirect)"
+            maxlength="200"
+          />
+          <textarea
+            v-model="findingDescription"
+            class="d-textarea"
+            placeholder="Notes (optional)"
+            rows="3"
+          />
+          <div class="d-form-actions">
+            <button
+              class="inv-btn inv-btn-primary"
+              :disabled="!findingTitle.trim() || isSavingFinding"
+              @click="submitFinding"
+            >{{ isSavingFinding ? 'Saving…' : '✓ Save finding' }}</button>
+            <button class="inv-btn inv-btn-ghost" @click="cancelFinding">Cancel</button>
+          </div>
+          <p v-if="findingError" class="d-form-error">{{ findingError }}</p>
+          <p v-if="findingSuccess" class="d-form-success">{{ findingSuccess }}</p>
+        </section>
       </div>
 
       <div v-if="selectedParam" class="drawer-foot">
@@ -332,6 +381,20 @@
           @click="openInHttpHistory(selectedParam)"
         >
           ⇱ View in HTTP History
+        </button>
+        <button
+          class="inv-btn"
+          title="Send the most recent request containing this parameter to Replay"
+          :disabled="isSendingToReplay"
+          @click="sendToReplay(selectedParam)"
+        >{{ isSendingToReplay ? '…' : '▶ Send to Replay' }}</button>
+        <button
+          v-if="!showFindingForm"
+          class="inv-btn"
+          title="Create a Caido finding linked to this parameter"
+          @click="openFindingForm(selectedParam)"
+        >
+          ⚑ Create finding
         </button>
       </div>
     </aside>
@@ -579,11 +642,23 @@ function expandAll(): void {
 }
 
 function openDrawer(p: Parameter): void {
-  selectedParam.value = p;
+  openDrawerParam(p);
 }
 
 function closeDrawer(): void {
   selectedParam.value = null;
+  showFindingForm.value = false;
+  findingError.value = '';
+  findingSuccess.value = '';
+}
+
+function openDrawerParam(p: Parameter): void {
+  if (selectedParam.value?.id !== p.id) {
+    showFindingForm.value = false;
+    findingError.value = '';
+    findingSuccess.value = '';
+  }
+  selectedParam.value = p;
 }
 
 function copyText(txt: string): void {
@@ -624,6 +699,12 @@ function escapeRegexLiteral(s: string): string {
 // path, treating placeholders like `{id}`, `{uuid}`, `{hash}` as a single
 // path segment (`[^/]+`). Anchored with `^…$` so we don't pick up sibling or
 // child endpoints the way `req.path.cont` did.
+//
+// An optional trailing `/?` is appended (except for the bare root `/`) so that
+// a path Caido stores with a trailing slash (e.g. `/api/`) still matches the
+// normalised form `/api` that the inventory records. `normalizePath` always
+// strips trailing slashes, so without this the HTTPQL query returns 0 results
+// for any endpoint whose path ends with `/`.
 function buildPathRegex(normalizedPath: string): string {
   const segments = normalizedPath.split('/');
   const escapedSegments = segments.map((segment) => {
@@ -633,7 +714,8 @@ function buildPathRegex(normalizedPath: string): string {
     }
     return escapeRegexLiteral(segment);
   });
-  return `^${escapedSegments.join('/')}$`;
+  const joined = escapedSegments.join('/');
+  return joined === '/' ? '^/$' : `^${joined}/?$`;
 }
 
 // Return the leaf key of a flattened JSON parameter name, i.e. the segment that
@@ -684,8 +766,14 @@ function buildHttpQLForParameter(p: Parameter): string {
       );
       break;
     case ParameterLocation.FORM:
+      // `req.body` is not a valid HTTPQL operator — use `req.raw` which covers
+      // the entire raw request (request line + headers + body). `^` would
+      // anchor to the start of the request line, not the body, so we rely on
+      // `&` for subsequent params and accept that the very first form param
+      // may only be caught by `&` if another param follows it. The host +
+      // method + path clauses above already constrain the result set tightly.
       parts.push(
-        `req.body.regex:"${escapeHttpQLString(`(?:^|&)${nameLit}=`)}"`,
+        `req.raw.regex:"${escapeHttpQLString(`(?:^|&)${nameLit}=`)}"`,
       );
       break;
     case ParameterLocation.JSON: {
@@ -693,17 +781,19 @@ function buildHttpQLForParameter(p: Parameter): string {
       // `user.name`), but the raw JSON body only contains the leaf key in
       // quotes. Match `"<leaf>"\s*:` so we hit a JSON key rather than any
       // substring with the same characters.
+      // `req.body` is not a valid HTTPQL operator — use `req.raw` instead.
       const leafLit = escapeRegexLiteral(jsonLeafKey(p.name));
       parts.push(
-        `req.body.regex:"${escapeHttpQLString(`"${leafLit}"\\s*:`)}"`,
+        `req.raw.regex:"${escapeHttpQLString(`"${leafLit}"\\s*:`)}"`,
       );
       break;
     }
     case ParameterLocation.MULTIPART:
       // Each multipart field has a `Content-Disposition: form-data; name="<n>"`
       // header. That's the most reliable place to look.
+      // `req.body` is not a valid HTTPQL operator — use `req.raw` instead.
       parts.push(
-        `req.body.regex:"${escapeHttpQLString(`name="${nameLit}"`)}"`,
+        `req.raw.regex:"${escapeHttpQLString(`name="${nameLit}"`)}"`,
       );
       break;
     case ParameterLocation.HEADER:
@@ -742,6 +832,168 @@ function openInHttpHistory(p: Parameter): void {
     caido?.navigation?.goTo?.({ id: 'HTTPHistory' });
   } catch (error) {
     console.error('Failed to open HTTP History with query:', query, error);
+  }
+}
+
+// ───── Attack surface hints ─────
+interface AttackHint {
+  icon: string;
+  label: string;
+  desc: string;
+}
+
+const attackHints = computed<AttackHint[]>(() => {
+  const p = selectedParam.value;
+  if (!p) return [];
+  const hints: AttackHint[] = [];
+  const flags = p.flags;
+  const types = p.valueTypes;
+
+  if (flags.includes('redirect' as any)) {
+    hints.push({
+      icon: '↗',
+      label: 'Open Redirect',
+      desc: 'Try //evil.com, /%2f%2fevil.com, https://evil.com',
+    });
+  }
+  if (flags.includes('file' as any)) {
+    hints.push({
+      icon: '📁',
+      label: 'Path Traversal / LFI',
+      desc: 'Try ../../../../etc/passwd, ....//....//etc/passwd, /proc/self/environ',
+    });
+  }
+  if (flags.includes('auth' as any)) {
+    hints.push({
+      icon: '🔑',
+      label: 'Auth Bypass',
+      desc: 'Try empty value, null, 0, true, admin — check if server-side validation is missing',
+    });
+  }
+  if (types.includes(ValueType.JWT)) {
+    hints.push({
+      icon: '🪙',
+      label: 'JWT Attacks',
+      desc: 'Decode payload, test alg:none, RS256→HS256 confusion, modify claims without resigning',
+    });
+  }
+  if (flags.includes('sensitive' as any) && !types.includes(ValueType.JWT)) {
+    hints.push({
+      icon: '🔍',
+      label: 'Info Disclosure',
+      desc: 'Check if value leaks credentials, tokens, or PII — verify it doesn\'t appear in responses',
+    });
+  }
+  if (types.includes(ValueType.INTEGER) || types.includes(ValueType.UUID)) {
+    hints.push({
+      icon: '🔢',
+      label: 'IDOR',
+      desc: 'Try neighbouring IDs, swapping with another user\'s ID, negative/zero/large values',
+    });
+  }
+  if (types.includes(ValueType.URL)) {
+    hints.push({
+      icon: '🌐',
+      label: 'SSRF',
+      desc: 'Try http://169.254.169.254/latest/meta-data, internal hostnames, file:// URIs',
+    });
+  }
+  if (types.includes(ValueType.BOOLEAN)) {
+    hints.push({
+      icon: '⚡',
+      label: 'Privilege Toggle',
+      desc: 'Flip true↔false — server may use this to gate admin features or bypass checks',
+    });
+  }
+  if (p.location === 'query' || p.location === 'form' || p.location === 'json') {
+    hints.push({
+      icon: '💉',
+      label: 'Injection surface',
+      desc: `${p.location.toUpperCase()} parameter — good candidate for SQLi, XSS, template injection payloads`,
+    });
+  }
+  return hints;
+});
+
+// ───── Send to Replay ─────
+const isSendingToReplay = ref(false);
+
+async function sendToReplay(p: Parameter): Promise<void> {
+  if (isSendingToReplay.value || !caido) return;
+  isSendingToReplay.value = true;
+  try {
+    const ids: string[] = await caido.backend.getRequestIdsForParam(p.id);
+    if (!ids || ids.length === 0) {
+      // Fall back to HTTP History so the user can pick a request manually
+      openInHttpHistory(p);
+      return;
+    }
+    const requestId = ids[0];
+    await caido.replay.createSession({ type: 'ID', id: requestId });
+    caido.navigation.goTo('Replay');
+  } catch (error) {
+    console.error('[Param Logger] sendToReplay failed:', error);
+    // Graceful fallback
+    openInHttpHistory(p);
+  } finally {
+    isSendingToReplay.value = false;
+  }
+}
+
+// ───── Create Finding ─────
+const showFindingForm = ref(false);
+const findingTitle = ref('');
+const findingDescription = ref('');
+const isSavingFinding = ref(false);
+const findingError = ref('');
+const findingSuccess = ref('');
+let findingParamId = '';
+
+function openFindingForm(p: Parameter): void {
+  findingParamId = p.id;
+  // Pre-fill the title with a useful default based on the param's flags
+  const flag = p.flags.find(f => f !== 'new');
+  const typeHint = flag ? ` (${flag})` : '';
+  findingTitle.value = `${p.name}${typeHint} — ${p.method} ${p.normalizedPath}`;
+  findingDescription.value = '';
+  findingError.value = '';
+  findingSuccess.value = '';
+  showFindingForm.value = true;
+}
+
+function cancelFinding(): void {
+  showFindingForm.value = false;
+  findingError.value = '';
+  findingSuccess.value = '';
+}
+
+async function submitFinding(): Promise<void> {
+  if (!caido || isSavingFinding.value || !findingTitle.value.trim()) return;
+  isSavingFinding.value = true;
+  findingError.value = '';
+  findingSuccess.value = '';
+  try {
+    const ids: string[] = await caido.backend.getRequestIdsForParam(findingParamId);
+    if (!ids || ids.length === 0) {
+      findingError.value = 'No captured request found for this parameter yet. Browse some traffic first.';
+      return;
+    }
+    const requestId = ids[0];
+    await caido.findings.createFinding(requestId, {
+      title: findingTitle.value.trim(),
+      description: findingDescription.value.trim() || undefined,
+      reporter: 'Param Logger',
+    });
+    findingSuccess.value = 'Finding created! View it in the Findings page.';
+    setTimeout(() => {
+      showFindingForm.value = false;
+      findingSuccess.value = '';
+    }, 2500);
+  } catch (error) {
+    console.error('[Param Logger] createFinding failed:', error);
+    findingError.value = 'Failed to create finding. See console for details.';
+  } finally {
+    isSavingFinding.value = false;
   }
 }
 

@@ -426,9 +426,14 @@ function classifyValue(value: string): ValueType {
     return ValueType.UUID;
   }
   
-  // JWT (three base64 parts separated by dots)
-  if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value)) {
-    return ValueType.JWT;
+  // JWT (three base64url parts separated by dots).
+  // Require total length >= 50 and a signature segment >= 20 chars to avoid
+  // matching short domain-like values such as "www.firmy.cz".
+  if (value.length >= 50) {
+    const jwtMatch = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.([A-Za-z0-9_-]{20,})$/.exec(value);
+    if (jwtMatch) {
+      return ValueType.JWT;
+    }
   }
   
   // Email
@@ -690,6 +695,25 @@ function registerRpc(sdk: Caido): void {
       console.error('[param-logger] getCurrentProject failed:', error);
       return { projectId: null, projectName: null };
     }
+  });
+
+  // Return up to 10 real Caido request IDs for a given parameter (most recent
+  // first). The frontend uses these to send the request to Replay or create a
+  // Finding without first going through HTTP History.
+  sdk.api.register('getRequestIdsForParam', async (_sdk: Caido, paramId: string) => {
+    const keys = paramRequestKeys.get(paramId);
+    if (!keys || keys.size === 0) return [];
+
+    // The Set preserves insertion order; newer requests are at the end.
+    // Filter out synthetic keys (prefix "syn:") and strip the "id:" prefix.
+    const realIds: string[] = [];
+    for (const key of keys) {
+      if (key.startsWith('id:')) {
+        realIds.push(key.slice(3));
+      }
+    }
+    // Reverse so the most recent ID comes first, cap at 10.
+    return realIds.reverse().slice(0, 10);
   });
 
   // Manually clear and rescan. Safe to call any time; useful as a recovery

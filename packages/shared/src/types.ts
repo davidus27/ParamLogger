@@ -103,6 +103,10 @@ export type InventoryBackendAPI = {
   getCurrentProject: () => Promise<ProjectInfo>;
   // Manually clear the inventory and re-scan history for the current project.
   resetAndRescan: () => Promise<{ ok: boolean }>;
+  // Returns up to 10 real Caido request IDs (most recent first) for the given
+  // parameter ID, so the frontend can send a request to Replay, create a
+  // Finding, etc. Returns an empty array when only synthetic IDs are available.
+  getRequestIdsForParam: (paramId: string) => Promise<string[]>;
   // Index signature to satisfy Caido BackendEndpoints constraint
   [key: string]: (...args: any[]) => any;
 };

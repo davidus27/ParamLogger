@@ -442,12 +442,20 @@
   flex-wrap: wrap;
 }
 
+.inv-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
 .inv-filter-label {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.6px;
   color: var(--c-fg-muted);
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .inv-filter-sep {
@@ -455,6 +463,7 @@
   height: 18px;
   background: var(--c-border-default);
   margin: 0 6px;
+  flex-shrink: 0;
 }
 
 .inv-pill {
@@ -974,17 +983,121 @@ thead th {
   border-top: 1px solid var(--c-border-default);
   flex-shrink: 0;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   background: var(--c-bg-elevated);
 }
 
 .drawer-foot .inv-btn {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: max-content;
   text-align: center;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 8px 12px;
+}
+
+/* ───── Attack surface hints ───── */
+.d-hints {
+  background: color-mix(in srgb, var(--c-accent-subtle, #d94a6a18) 40%, transparent);
+  border-radius: 6px;
+  margin: 4px 0;
+}
+
+.d-hint-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--c-border-default);
+}
+
+.d-hint-row:last-child {
+  border-bottom: none;
+}
+
+.hint-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+  margin-top: 1px;
+}
+
+.hint-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hint-body strong {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--c-fg-default);
+}
+
+.hint-desc {
+  font-size: 10px;
+  color: var(--c-fg-muted);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* ───── Create Finding form ───── */
+.d-finding-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.d-input,
+.d-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--c-bg-default);
+  border: 1px solid var(--c-border-default);
+  border-radius: 4px;
+  color: var(--c-fg-default);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 6px 8px;
+  resize: vertical;
+  outline: none;
+  transition: border-color 80ms ease;
+}
+
+.d-input:focus,
+.d-textarea:focus {
+  border-color: var(--c-accent-default, #d94a6a);
+}
+
+.d-textarea {
+  min-height: 56px;
+}
+
+.d-form-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.d-form-actions .inv-btn {
+  flex: 1;
+  justify-content: center;
+  padding: 6px 10px;
+}
+
+.d-form-error {
+  font-size: 10px;
+  color: var(--c-danger, #e05c6a);
+  margin: 0;
+}
+
+.d-form-success {
+  font-size: 10px;
+  color: var(--c-success, #4caf82);
+  margin: 0;
 }
 
 /* ───── Scrollbars ───── */
