@@ -174,18 +174,14 @@
 
       <div class="inv-table-wrap">
         <div v-if="filteredParameters.length" class="table-container">
-          <table class="table-header">
-            <thead>
-              <tr>
-                <th :style="{ width: rowNumWidth + 'px' }"></th>
-                <th>Parameter</th>
-                <th>Location</th>
-                <th>Endpoint</th>
-                <th>Value type</th>
-                <th>Flags</th>
-              </tr>
-            </thead>
-          </table>
+          <div class="table-header">
+            <div class="table-head-cell row-num" :style="{ width: rowNumWidth + 'px' }"></div>
+            <div class="table-head-cell col-param">Parameter</div>
+            <div class="table-head-cell col-loc">Location</div>
+            <div class="table-head-cell col-endpoint">Endpoint</div>
+            <div class="table-head-cell col-valtype">Value type</div>
+            <div class="table-head-cell col-flags">Flags</div>
+          </div>
 
           <div class="inv-table-body">
             <RecycleScroller
