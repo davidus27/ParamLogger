@@ -429,10 +429,10 @@
       <div v-if="selectedParam" class="drawer-foot">
         <button
           class="inv-btn inv-btn-primary"
-          title="Open HTTP History filtered to requests containing this parameter"
-          @click="openInHttpHistory(selectedParam)"
+          title="Open Search filtered to requests containing this parameter"
+          @click="openInSearch(selectedParam)"
         >
-          ⇱ View in HTTP History
+          ⇱ View in Search
         </button>
         <button
           class="inv-btn"
@@ -867,9 +867,9 @@ function jsonLeafKey(name: string): string {
   return s;
 }
 
-// Build an HTTPQL query that scopes HTTP History to requests carrying this
+// Build an HTTPQL query that scopes Search to requests carrying this
 // parameter. The query is intentionally conservative: every clause is anchored
-// (regex or exact-match) so the count in HTTP History agrees with the
+// (regex or exact-match) so the count in Search agrees with the
 // per-parameter `count` we display in the inventory.
 function buildHttpQLForParameter(p: Parameter): string {
   const parts: string[] = [];
@@ -891,67 +891,57 @@ function buildHttpQLForParameter(p: Parameter): string {
     `req.path.regex:"${escapeHttpQLString(buildPathRegex(p.normalizedPath))}"`,
   );
 
-  const nameLit = escapeRegexLiteral(p.name);
-
   switch (p.location) {
-    case ParameterLocation.QUERY:
+    case ParameterLocation.QUERY: {
       // `req.query` excludes the leading `?`, so a parameter at the start of
       // the query string has nothing before it, and any other parameter is
       // preceded by `&`. Anchor accordingly so `id` doesn't match `userid`.
+      const nameLit = escapeRegexLiteral(p.name);
       parts.push(
         `req.query.regex:"${escapeHttpQLString(`(?:^|&)${nameLit}=`)}"`,
       );
       break;
+    }
     case ParameterLocation.FORM:
-      // `req.body` is not a valid HTTPQL operator — use `req.raw` which covers
-      // the entire raw request (request line + headers + body). `^` would
-      // anchor to the start of the request line, not the body, so we rely on
-      // `&` for subsequent params and accept that the very first form param
-      // may only be caught by `&` if another param follows it. The host +
-      // method + path clauses above already constrain the result set tightly.
+      // Use case-insensitive substring matching (`cont`) instead of `regex`
+      // on `req.raw`. The `regex` operator can return 0 results for requests
+      // where the raw bytes aren't stored as searchable text (e.g. HTTP/2
+      // traffic with HPACK-compressed headers). `cont` uses a different
+      // search path that is more reliable. The host + method + path clauses
+      // already constrain the result set, so the precision loss is minimal.
       parts.push(
-        `req.raw.regex:"${escapeHttpQLString(`(?:^|&)${nameLit}=`)}"`,
+        `req.raw.cont:"${escapeHttpQLString(`${p.name}=`)}"`,
       );
       break;
     case ParameterLocation.JSON: {
-      // The parser flattens nested keys to dot/bracket notation (e.g.
-      // `user.name`), but the raw JSON body only contains the leaf key in
-      // quotes. Match `"<leaf>"\s*:` so we hit a JSON key rather than any
-      // substring with the same characters.
-      // `req.body` is not a valid HTTPQL operator — use `req.raw` instead.
-      const leafLit = escapeRegexLiteral(jsonLeafKey(p.name));
+      // Match the quoted JSON key name. `cont` is more reliable than `regex`
+      // on `req.raw` (see FORM comment above).
+      const leaf = jsonLeafKey(p.name);
       parts.push(
-        `req.raw.regex:"${escapeHttpQLString(`"${leafLit}"\\s*:`)}"`,
+        `req.raw.cont:"${escapeHttpQLString(`"${leaf}"`)}"`,
       );
       break;
     }
     case ParameterLocation.MULTIPART:
-      // Each multipart field has a `Content-Disposition: form-data; name="<n>"`
-      // header. That's the most reliable place to look.
-      // `req.body` is not a valid HTTPQL operator — use `req.raw` instead.
+      // Match the Content-Disposition field name.
       parts.push(
-        `req.raw.regex:"${escapeHttpQLString(`name="${nameLit}"`)}"`,
+        `req.raw.cont:"${escapeHttpQLString(`name="${p.name}"`)}"`,
       );
       break;
     case ParameterLocation.HEADER:
-      // Match the header at the start of a line via Rust's `(?m)` multi-line
-      // mode so we don't also match the same word appearing inside another
-      // header's value (e.g. a UA string or a referrer URL). HTTP header names
-      // are case-insensitive (RFC 9110), and HTTP/2 traffic is stored with
-      // lower-cased header names in `req.raw`, so we must also match
-      // case-insensitively — otherwise a parameter the inventory normalised to
-      // `Origin` won't match the literal `origin:` bytes on the wire.
+      // Match "HeaderName:" substring. `cont` is case-insensitive which
+      // covers both HTTP/1.1 mixed-case and HTTP/2 lower-cased header names.
       parts.push(
-        `req.raw.regex:"${escapeHttpQLString(`(?im)^${nameLit}:`)}"`,
+        `req.raw.cont:"${escapeHttpQLString(`${p.name}:`)}"`,
       );
       break;
     case ParameterLocation.COOKIE:
-      // Anchor inside the `Cookie:` header. The `Cookie` token itself is
-      // case-insensitive (and lower-cased in HTTP/2 raw), but the cookie name
-      // is case-sensitive, so we scope the `(?i)` flag to just the prefix via
-      // an inline group. `\b` keeps `id` from matching `userid=`.
+      // Match "cookieName=" substring. Using `cont` instead of `regex` on
+      // `req.raw` avoids the 0-result issue where req.raw.regex fails to
+      // search within Cookie headers (observed with HTTP/2 traffic where raw
+      // bytes aren't indexed as searchable text for the regex operator).
       parts.push(
-        `req.raw.regex:"${escapeHttpQLString(`(?i:cookie):[^\\r\\n]*\\b${nameLit}=`)}"`,
+        `req.raw.cont:"${escapeHttpQLString(`${p.name}=`)}"`,
       );
       break;
     case ParameterLocation.PATH:
@@ -962,13 +952,13 @@ function buildHttpQLForParameter(p: Parameter): string {
   return parts.join(' AND ');
 }
 
-function openInHttpHistory(p: Parameter): void {
+function openInSearch(p: Parameter): void {
   const query = buildHttpQLForParameter(p);
   try {
-    caido?.httpHistory?.setQuery?.(query as HTTPQL);
-    caido?.navigation?.goTo?.({ id: 'HTTPHistory' });
+    caido?.search?.setQuery?.(query as HTTPQL);
+    caido?.navigation?.goTo?.({ id: 'Search' });
   } catch (error) {
-    console.error('Failed to open HTTP History with query:', query, error);
+    console.error('Failed to open Search with query:', query, error);
   }
 }
 
@@ -1372,8 +1362,8 @@ async function sendToReplay(p: Parameter): Promise<void> {
   try {
     const ids: string[] = await caido.backend.getRequestIdsForParam(p.id);
     if (!ids || ids.length === 0) {
-      // Fall back to HTTP History so the user can pick a request manually
-      openInHttpHistory(p);
+      // Fall back to Search so the user can pick a request manually
+      openInSearch(p);
       return;
     }
     const requestId = ids[0];
@@ -1382,7 +1372,7 @@ async function sendToReplay(p: Parameter): Promise<void> {
   } catch (error) {
     console.error('[Param Logger] sendToReplay failed:', error);
     // Graceful fallback
-    openInHttpHistory(p);
+    openInSearch(p);
   } finally {
     isSendingToReplay.value = false;
   }

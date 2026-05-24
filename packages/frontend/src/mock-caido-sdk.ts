@@ -281,10 +281,9 @@ export const mockCaido: Caido<InventoryBackendAPI, InventoryBackendEvents> = {
   shortcuts: {} as any,
   commandPalette: {} as any,
   replay: {} as any,
-  search: {} as any,
-  httpHistory: {
+  search: {
     setQuery: (query: any) => {
-      console.log('Mock: httpHistory.setQuery', query);
+      console.log('Mock: search.setQuery', query);
     },
     getQuery: () => '' as any,
     getScopeId: () => undefined,
@@ -296,6 +295,7 @@ export const mockCaido: Caido<InventoryBackendAPI, InventoryBackendEvents> = {
     scrollTo: () => {},
     addToSlot: (() => {}) as any,
   } as any,
+  httpHistory: {} as any,
   automate: {} as any,
   files: {} as any,
   filters: {} as any,

@@ -42,7 +42,7 @@ let totalRequests = 0;
 // a scan is in flight is otherwise observed by both paths and double-counted.
 // Keying off the request id ensures every request contributes exactly once,
 // which is what the displayed `count` ("N requests") must mean for the number
-// to match what "View in HTTP History" returns.
+// to match what "View in Search" returns.
 const ingestedRequestIds = new Set<string>();
 
 // Per-parameter set of request keys (id when available, synthetic when not).
@@ -1073,7 +1073,7 @@ function registerRpc(sdk: Caido): void {
 
   // Return up to 10 real Caido request IDs for a given parameter (most recent
   // first). The frontend uses these to send the request to Replay or create a
-  // Finding without first going through HTTP History.
+  // Finding without first going through Search.
   sdk.api.register('getRequestIdsForParam', async (_sdk: Caido, paramId: string) => {
     const keys = paramRequestKeys.get(paramId);
     if (!keys || keys.size === 0) return [];
