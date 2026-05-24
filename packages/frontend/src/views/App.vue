@@ -17,11 +17,6 @@
       <span class="inv-result-count">{{ resultCountLabel }}</span>
       <div class="inv-header-actions">
         <button
-          class="inv-btn inv-btn-help"
-          title="How to use Param Logger"
-          @click="openHelp"
-        >?</button>
-        <button
           class="inv-btn"
           :disabled="isRescanning"
           title="Clear the inventory and rescan the current project from scratch"
@@ -317,7 +312,14 @@
         <span class="live-dot" :class="{ off: !isConnected }"></span>
         {{ isConnected ? 'Listening' : 'Disconnected' }} · {{ scopedParameterCount }} unique params
       </span>
-      <span>v0.1.0</span>
+      <span class="inv-statusbar-right">
+        <button
+          class="inv-btn-help"
+          title="How to use Param Logger"
+          @click="openHelp"
+        >?</button>
+        <span>v0.1.0</span>
+      </span>
     </footer>
 
     <!-- ───── Detail drawer ───── -->

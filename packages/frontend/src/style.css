@@ -1213,25 +1213,32 @@
 
 /* ───── Help button ───── */
 .inv-btn-help {
-  width: 28px;
-  height: 28px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 11px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
   color: var(--c-fg-subtle);
-  background: var(--c-bg-elevated);
+  background: transparent;
   border: 1px solid var(--c-border-default);
-  flex-shrink: 0;
+  line-height: 1;
+  transition: color 0.15s, border-color 0.15s;
 }
 
 .inv-btn-help:hover {
   color: var(--c-fg-default);
   border-color: var(--c-fg-primary);
-  background: var(--c-bg-elevated);
+}
+
+.inv-statusbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* ───── Help modal overlay ───── */
