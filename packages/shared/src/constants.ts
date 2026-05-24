@@ -47,6 +47,42 @@ export const AUTH_NAME_PATTERNS = [
   /access/i,
 ] as const;
 
+// IDOR parameter name patterns
+export const IDOR_NAME_PATTERNS = [
+  /auth/i,
+] as const;
+
+// SSTI parameter name patterns
+export const SSTI_NAME_PATTERNS = [
+  /template/i,
+  /theme/i,
+  /render/i,
+  /layout/i,
+  /view/i,
+  /format/i,
+] as const;
+
+// Injection parameter name patterns
+export const INJECTION_NAME_PATTERNS = [
+  /query/i,
+  /search/i,
+  /filter/i,
+  /where/i,
+  /sql/i,
+  /expr/i,
+  /cmd/i,
+] as const;
+
+// Debug parameter name patterns
+export const DEBUG_NAME_PATTERNS = [
+  /debug/i,
+  /verbose/i,
+  /dev/i,
+  /admin/i,
+  /trace/i,
+  /test/i,
+] as const;
+
 // Headers to exclude from parameter extraction
 export const EXCLUDED_HEADERS = new Set([
   'accept',

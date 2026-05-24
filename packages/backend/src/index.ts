@@ -2,22 +2,27 @@
  * Backend plugin entry point for Param Logger
  */
 
-import type { Caido, Request, Project } from "@caido/sdk-backend";
+import type { Caido, Request, Response, Project } from "@caido/sdk-backend";
 import type {
   Parameter,
   Domain,
   InventoryStats,
   InventoryFilters,
-  ParameterLocation,
   ProjectInfo,
+  ParsedRequest,
 } from "@param-logger/shared";
 import {
   ValueType,
   Flag,
+  ParameterLocation,
   SENSITIVE_NAME_PATTERNS,
   REDIRECT_NAME_PATTERNS,
   FILE_NAME_PATTERNS,
   AUTH_NAME_PATTERNS,
+  IDOR_NAME_PATTERNS,
+  SSTI_NAME_PATTERNS,
+  INJECTION_NAME_PATTERNS,
+  DEBUG_NAME_PATTERNS,
   NEW_PARAMETER_THRESHOLD_MS,
 } from "@param-logger/shared";
 
@@ -89,6 +94,10 @@ export function init(sdk: Caido): void {
 
   sdk.events.onInterceptRequest((_s, req) => {
     ingest(sdk, req);
+  });
+
+  sdk.events.onInterceptResponse((s, req, resp) => {
+    handleResponseAnalysis(s, req, resp);
   });
 
   // Subscribe to project changes so we can clear and rescan whenever the user
@@ -400,6 +409,184 @@ function ingest(sdk: Caido, request: Request): void {
   }
 }
 
+/**
+ * Handle response analysis for reflection detection and Set-Cookie extraction
+ */
+function handleResponseAnalysis(_sdk: Caido, request: Request, response: Response): void {
+  try {
+    // Parse request parameters for reflection analysis
+    const parsedRequest = parseRequest(request);
+    
+    // Get response body for reflection detection
+    const responseBody = response.getBody()?.toText();
+    if (responseBody) {
+      detectReflection(parsedRequest, responseBody);
+    }
+    
+    // Extract Set-Cookie headers
+    extractSetCookies(parsedRequest, response);
+    
+  } catch (error) {
+    console.error("Error analyzing response:", error);
+  }
+}
+
+/**
+ * Detect parameter reflection in response body
+ */
+function detectReflection(parsedRequest: ParsedRequest, responseBody: string): void {
+  const updatedParams: string[] = [];
+  
+  for (const parsedParam of parsedRequest.parameters) {
+    // Only check non-empty values that are at least 5 characters long
+    if (parsedParam.value && parsedParam.value.length >= 5) {
+      // Check if the parameter value appears verbatim in the response body
+      if (responseBody.includes(parsedParam.value)) {
+        const id = `${parsedRequest.domain}:${parsedRequest.method}:${parsedRequest.normalizedPath}:${parsedParam.location}:${parsedParam.name}`;
+        const parameter = parameters.get(id);
+        
+        if (parameter && !parameter.flags.includes(Flag.REFLECTED)) {
+          // Add REFLECTED flag
+          parameter.flags.push(Flag.REFLECTED);
+          updatedParams.push(id);
+        }
+      }
+    }
+  }
+  
+  // Batch update reflected parameters
+  if (updatedParams.length > 0) {
+    for (const id of updatedParams) {
+      pendingParameterIds.add(id);
+    }
+    scheduleFlush();
+  }
+}
+
+/**
+ * Extract Set-Cookie headers and ingest them as cookie parameters
+ */
+function extractSetCookies(parsedRequest: ParsedRequest, response: Response): void {
+  const headers = response.getHeaders();
+  
+  // Look for Set-Cookie headers (case-insensitive)
+  let setCookieHeaders: string[] = [];
+  for (const [headerName, headerValues] of Object.entries(headers)) {
+    if (headerName.toLowerCase() === 'set-cookie') {
+      setCookieHeaders = Array.isArray(headerValues) ? headerValues : [String(headerValues)];
+      break;
+    }
+  }
+  
+  if (setCookieHeaders.length === 0) {
+    return;
+  }
+  
+  // Parse each Set-Cookie header
+  for (const setCookieValue of setCookieHeaders) {
+    const cookieParams = parseSetCookie(setCookieValue);
+    
+    for (const cookieParam of cookieParams) {
+      // Create a synthetic request with the cookie parameter
+      const syntheticRequestKey = `cookie:${++syntheticRequestSeq}`;
+      const now = new Date();
+      
+      const id = `${parsedRequest.domain}:${parsedRequest.method}:${parsedRequest.normalizedPath}:${ParameterLocation.COOKIE}:${cookieParam.name}`;
+      
+      let keys = paramRequestKeys.get(id);
+      if (!keys) {
+        keys = new Set<string>();
+        paramRequestKeys.set(id, keys);
+      }
+      const sizeBefore = keys.size;
+      keys.add(syntheticRequestKey);
+      const countIncreased = keys.size !== sizeBefore;
+      
+      let parameter = parameters.get(id);
+      
+      if (!parameter) {
+        // New cookie parameter - compute static flags
+        const valueTypes = classifyValue(cookieParam.value);
+        const staticFlags = computeStaticFlags(cookieParam.name, cookieParam.value, valueTypes);
+        const flags = recomputeNewFlag(staticFlags, now);
+        
+        parameter = {
+          id,
+          domain: parsedRequest.domain,
+          method: parsedRequest.method,
+          normalizedPath: parsedRequest.normalizedPath,
+          location: ParameterLocation.COOKIE,
+          name: cookieParam.name,
+          valueTypes,
+          flags,
+          count: keys.size,
+          firstSeen: now,
+          lastSeen: now,
+        };
+        
+        parameters.set(id, parameter);
+        pendingParameterIds.add(id);
+      } else {
+        // Existing cookie parameter - update it
+        const newTypes = classifyValue(cookieParam.value);
+        const previousCount = parameter.count;
+        
+        parameter.count = keys.size;
+        parameter.lastSeen = now;
+        
+        // Accumulate any value types not seen before
+        for (const t of newTypes) {
+          if (!parameter.valueTypes.includes(t)) {
+            parameter.valueTypes.push(t);
+          }
+        }
+        
+        // Only recompute NEW flag (static flags don't change)
+        parameter.flags = recomputeNewFlag(parameter.flags, parameter.firstSeen);
+        
+        // Emit on count changes
+        if (countIncreased && (previousCount === 1 || parameter.count % 10 === 0)) {
+          pendingParameterIds.add(id);
+        }
+      }
+    }
+  }
+  
+  // Schedule flush for cookie parameters
+  if (setCookieHeaders.length > 0) {
+    pendingStatsChange = true;
+    scheduleFlush();
+  }
+}
+
+/**
+ * Parse a Set-Cookie header value into cookie name-value pairs
+ */
+function parseSetCookie(setCookieValue: string): Array<{ name: string; value: string }> {
+  const cookies: Array<{ name: string; value: string }> = [];
+  
+  // Split on semicolon to separate the main cookie from attributes
+  const parts = setCookieValue.split(';');
+  if (parts.length === 0) {
+    return cookies;
+  }
+  
+  // Parse the main cookie (name=value)
+  const mainCookie = parts[0].trim();
+  const equalIndex = mainCookie.indexOf('=');
+  
+  if (equalIndex > 0) {
+    const name = mainCookie.substring(0, equalIndex).trim();
+    const value = mainCookie.substring(equalIndex + 1).trim();
+    
+    if (name) {
+      cookies.push({ name, value });
+    }
+  }
+  
+  return cookies;
+}
+
 // ── UUID classification ───────────────────────────────────────────────────────
 //
 // Each pattern enforces the RFC 4122 variant bits ([89ab] in the 9th position)
@@ -457,6 +644,32 @@ function classifyUUID(value: string): ValueType[] {
   if (UUID_GENERIC.test(value)) return [ValueType.UUID];
 
   return [];
+}
+
+/**
+ * Calculate Shannon entropy of a string in bits per character.
+ * Higher values indicate more randomness/unpredictability.
+ */
+function calculateShannonEntropy(str: string): number {
+  if (str.length === 0) return 0;
+  
+  const frequency = new Map<string, number>();
+  
+  // Count character frequencies
+  for (const char of str) {
+    frequency.set(char, (frequency.get(char) || 0) + 1);
+  }
+  
+  // Calculate entropy
+  let entropy = 0;
+  const length = str.length;
+  
+  for (const count of frequency.values()) {
+    const probability = count / length;
+    entropy -= probability * Math.log2(probability);
+  }
+  
+  return entropy;
 }
 
 /**
@@ -520,6 +733,46 @@ function classifyValue(value: string): ValueType[] {
     return [ValueType.BASE64];
   }
 
+  // Timestamp detection
+  // 10-digit (seconds), 13-digit (milliseconds), 16-digit (microseconds) integers
+  if (/^\d{10}$/.test(value) || /^\d{13}$/.test(value) || /^\d{16}$/.test(value)) {
+    return [ValueType.TIMESTAMP];
+  }
+  
+  // ISO 8601 strings (basic pattern)
+  if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    return [ValueType.TIMESTAMP];
+  }
+
+  // IP address detection
+  // IPv4 dotted-quad
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(value)) {
+    // Validate each octet is 0-255
+    const octets = value.split('.');
+    if (octets.every(octet => {
+      const num = parseInt(octet, 10);
+      return num >= 0 && num <= 255;
+    })) {
+      return [ValueType.IP];
+    }
+  }
+  
+  // IPv6 (simplified pattern for compressed notation)
+  if (/^[0-9a-f]*:+[0-9a-f:]*$/i.test(value) && value.includes(':')) {
+    return [ValueType.IP];
+  }
+
+  // Serialized object detection
+  // PHP serialization patterns
+  if (/^[OoAaSs]:\d+:/.test(value)) {
+    return [ValueType.SERIALIZED];
+  }
+  
+  // Java serialization (hex or base64 with aced prefix)
+  if (/^aced/i.test(value)) {
+    return [ValueType.SERIALIZED];
+  }
+
   return [ValueType.STRING];
 }
 
@@ -546,6 +799,31 @@ function computeStaticFlags(name: string, value: string, valueTypes: ValueType[]
     flags.push(Flag.AUTH);
   }
 
+  // IDOR detection: auth name pattern AND integer value type
+  if (IDOR_NAME_PATTERNS.some(pattern => pattern.test(name)) && valueTypes.includes(ValueType.INTEGER)) {
+    flags.push(Flag.IDOR);
+  }
+
+  // SSTI detection
+  if (SSTI_NAME_PATTERNS.some(pattern => pattern.test(name))) {
+    flags.push(Flag.SSTI);
+  }
+
+  // Injection detection
+  if (INJECTION_NAME_PATTERNS.some(pattern => pattern.test(name))) {
+    flags.push(Flag.INJECTION);
+  }
+
+  // Debug detection
+  if (DEBUG_NAME_PATTERNS.some(pattern => pattern.test(name))) {
+    flags.push(Flag.DEBUG);
+  }
+
+  // Proto pollution detection: exact substring match in name
+  if (name.includes('__proto__') || name.includes('constructor') || name.includes('prototype')) {
+    flags.push(Flag.PROTO_POLLUTION);
+  }
+
   // Value-based sensitive detection
   if (
     valueTypes.includes(ValueType.JWT) ||
@@ -553,6 +831,35 @@ function computeStaticFlags(name: string, value: string, valueTypes: ValueType[]
   ) {
     if (!flags.includes(Flag.SENSITIVE)) {
       flags.push(Flag.SENSITIVE);
+    }
+  }
+
+  // AWS/PEM credential detection
+  if (/^AKIA[0-9A-Z]{16}$/.test(value)) {
+    if (!flags.includes(Flag.SENSITIVE)) {
+      flags.push(Flag.SENSITIVE);
+    }
+  }
+
+  if (/-----BEGIN .+ KEY-----|-----BEGIN CERTIFICATE-----/.test(value)) {
+    if (!flags.includes(Flag.SENSITIVE)) {
+      flags.push(Flag.SENSITIVE);
+    }
+  }
+
+  // Entropy-based sensitive detection
+  // For string values with high entropy (> 4.5 bits/char) that don't match known formats
+  if (valueTypes.includes(ValueType.STRING) && value.length >= 8) {
+    const entropy = calculateShannonEntropy(value);
+    if (entropy > 4.5) {
+      // Check if this matches any known structured format (to avoid false positives)
+      const hasKnownFormat = valueTypes.some(type => 
+        type !== ValueType.STRING && type !== ValueType.UNKNOWN
+      );
+      
+      if (!hasKnownFormat && !flags.includes(Flag.SENSITIVE)) {
+        flags.push(Flag.SENSITIVE);
+      }
     }
   }
 
@@ -564,7 +871,7 @@ function computeStaticFlags(name: string, value: string, valueTypes: ValueType[]
  */
 function recomputeNewFlag(flags: Flag[], firstSeen: Date): Flag[] {
   // Remove existing NEW flag
-  const filteredFlags = flags.filter(flag => flag !== Flag.NEW);
+  const filteredFlags: Flag[] = flags.filter(flag => flag !== Flag.NEW);
   
   // Add NEW flag if first seen within threshold
   const age = Date.now() - firstSeen.getTime();

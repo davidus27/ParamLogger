@@ -54,6 +54,9 @@ export enum ValueType {
   JWT = 'jwt',
   BASE64 = 'base64',
   HASH = 'hash',
+  TIMESTAMP = 'timestamp',
+  IP = 'ip',
+  SERIALIZED = 'serialized',
   UNKNOWN = 'unknown',
 }
 
@@ -64,6 +67,12 @@ export enum Flag {
   REDIRECT = 'redirect',
   FILE = 'file',
   AUTH = 'auth',
+  IDOR = 'idor',
+  SSTI = 'ssti',
+  INJECTION = 'injection',
+  DEBUG = 'debug',
+  PROTO_POLLUTION = 'proto',
+  REFLECTED = 'reflected',
 }
 
 // Inventory statistics

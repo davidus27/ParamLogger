@@ -711,6 +711,11 @@
 .flag-redirect  { color: #f5d76e; border-color: rgba(245, 215, 110, 0.35); background: rgba(245, 215, 110, 0.10); }
 .flag-file      { color: #b39ddb; border-color: rgba(179, 157, 219, 0.35); background: rgba(179, 157, 219, 0.10); }
 .flag-auth      { color: #f0a05a; border-color: rgba(240, 160, 90, 0.35); background: rgba(240, 160, 90, 0.10); }
+.flag-idor      { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.40); background: rgba(255, 107, 107, 0.15); }
+.flag-ssti      { color: #da70d6; border-color: rgba(218, 112, 214, 0.35); background: rgba(218, 112, 214, 0.12); }
+.flag-injection { color: #ff4757; border-color: rgba(255, 71, 87, 0.40); background: rgba(255, 71, 87, 0.15); }
+.flag-debug     { color: #ffa502; border-color: rgba(255, 165, 2, 0.35); background: rgba(255, 165, 2, 0.12); }
+.flag-proto     { color: #7bed9f; border-color: rgba(123, 237, 159, 0.35); background: rgba(123, 237, 159, 0.12); }
 .flag-dynamic   { color: #6cc06c; border-color: rgba(108, 192, 108, 0.35); background: rgba(108, 192, 108, 0.10); }
 
 /* ───── Empty/loading state ───── */
