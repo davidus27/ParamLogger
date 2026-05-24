@@ -940,6 +940,7 @@ async function triggerRescan(): Promise<void> {
   isRescanning.value = true;
   try {
     selectedParam.value = null;
+    refreshScope('rescan');
     await resetAndRescan();
   } catch (error) {
     console.error('[Param Inventory] Failed to trigger rescan:', error);
