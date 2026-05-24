@@ -28,6 +28,7 @@ export enum ParameterLocation {
   HEADER = 'header',
   COOKIE = 'cookie',
   MULTIPART = 'multipart',
+  GRAPHQL = 'graphql',
 }
 
 // Value type classification

@@ -182,10 +182,106 @@ function parseBody(request: Request): ParsedParameter[] {
   } else if (FORM_CONTENT_TYPES.has(contentType)) {
     return parseFormBody(body);
   } else if (MULTIPART_CONTENT_TYPES.has(contentType)) {
-    return parseMultipartBody(body);
+    return parseMultipartBody(body, request);
   }
 
   return [];
+}
+
+/**
+ * Check if a JSON object is a GraphQL request
+ */
+function isGraphQL(json: any): boolean {
+  return typeof json?.query === 'string' &&
+    /^\s*(query|mutation|subscription)[\s({]/.test(json.query);
+}
+
+/**
+ * Parse GraphQL body and extract operation name, field names, and variables
+ */
+function parseGraphQLBody(json: any): ParsedParameter[] {
+  const parameters: ParsedParameter[] = [];
+
+  try {
+    // Extract operation name if present
+    if (json.operationName && typeof json.operationName === 'string') {
+      parameters.push({
+        location: ParameterLocation.GRAPHQL,
+        name: 'operationName',
+        value: json.operationName,
+      });
+    }
+
+    // Extract field names from the query using regex
+    if (json.query && typeof json.query === 'string') {
+      const fieldNames = extractGraphQLFieldNames(json.query);
+      for (const fieldName of fieldNames) {
+        parameters.push({
+          location: ParameterLocation.GRAPHQL,
+          name: `field.${fieldName}`,
+          value: fieldName,
+        });
+      }
+    }
+
+    // Extract variables if present
+    if (json.variables && typeof json.variables === 'object') {
+      const flattenedVariables = flattenObject(json.variables, 'variables');
+      for (const [name, value] of Object.entries(flattenedVariables)) {
+        parameters.push({
+          location: ParameterLocation.GRAPHQL,
+          name,
+          value: valueToString(value),
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error parsing GraphQL body:', error);
+  }
+
+  return parameters;
+}
+
+/**
+ * Extract field names from GraphQL query string using lightweight regex
+ */
+function extractGraphQLFieldNames(query: string): string[] {
+  const fieldNames: string[] = [];
+  
+  try {
+    // Remove comments, strings, and normalize whitespace
+    const cleanQuery = query
+      .replace(/#.*$/gm, '')  // Remove comments
+      .replace(/"[^"]*"/g, '""')  // Replace string literals
+      .replace(/\s+/g, ' ')  // Normalize whitespace
+      .trim();
+
+    // Find selection sets (content between { and })
+    const selectionSetMatches = cleanQuery.match(/\{[^{}]*\}/g);
+    
+    if (selectionSetMatches) {
+      for (const selectionSet of selectionSetMatches) {
+        // Extract field names from selection set
+        const content = selectionSet.slice(1, -1).trim(); // Remove { and }
+        const fields = content.split(/[,\s]+/).filter(field => field.length > 0);
+        
+        for (const field of fields) {
+          // Extract just the field name (before any arguments or aliases)
+          const fieldMatch = field.match(/^(\w+)/);
+          if (fieldMatch) {
+            const fieldName = fieldMatch[1];
+            if (!fieldNames.includes(fieldName)) {
+              fieldNames.push(fieldName);
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error extracting GraphQL field names:', error);
+  }
+
+  return fieldNames;
 }
 
 /**
@@ -196,6 +292,12 @@ function parseJsonBody(body: any): ParsedParameter[] {
 
   try {
     const json = body.toJson();
+    
+    // Check if this is a GraphQL request
+    if (isGraphQL(json)) {
+      return parseGraphQLBody(json);
+    }
+    
     const flattenedParams = flattenObject(json);
 
     for (const [name, value] of Object.entries(flattenedParams)) {
@@ -238,26 +340,157 @@ function parseFormBody(body: any): ParsedParameter[] {
 }
 
 /**
- * Parse multipart body (basic field name extraction)
+ * Extract boundary string from Content-Type header or multipart body
  */
-function parseMultipartBody(body: any): ParsedParameter[] {
+function extractMultipartBoundary(bodyText: string, request?: Request): string | null {
+  // First try to get boundary from Content-Type header if request is available
+  if (request) {
+    const headers = request.getHeaders();
+    const contentTypeHeader = getHeaderValue(headers, 'content-type');
+    if (contentTypeHeader && contentTypeHeader.length > 0) {
+      const boundaryMatch = contentTypeHeader[0].match(/boundary=([^;\s]+)/i);
+      if (boundaryMatch) {
+        // Remove quotes if present
+        return boundaryMatch[1].replace(/^["']|["']$/g, '');
+      }
+    }
+  }
+  
+  // Fallback: look for boundary in the body text itself (common pattern)
+  const boundaryMatch = bodyText.match(/^--([^\r\n]+)/m);
+  if (boundaryMatch) {
+    return boundaryMatch[1];
+  }
+  
+  return null;
+}
+
+/**
+ * Parse multipart parts from body text using boundary
+ */
+function parseMultipartParts(bodyText: string, boundary: string): Array<{name: string | null, value: string | null}> {
+  const parts: Array<{name: string | null, value: string | null}> = [];
+  
+  try {
+    // Split by boundary (handle both --boundary and ----boundary patterns)
+    const boundaryPattern = new RegExp(`--${escapeRegex(boundary)}(?:--)?`, 'g');
+    const segments = bodyText.split(boundaryPattern);
+    
+    for (const segment of segments) {
+      const trimmed = segment.trim();
+      if (!trimmed) continue;
+      
+      // Split headers from body
+      const headerBodySplit = trimmed.split(/\r?\n\r?\n/);
+      if (headerBodySplit.length < 2) continue;
+      
+      const headers = headerBodySplit[0];
+      const bodyContent = headerBodySplit.slice(1).join('\n\n');
+      
+      // Extract name from Content-Disposition header
+      const nameMatch = headers.match(/name\s*=\s*"([^"]+)"/i);
+      const name = nameMatch ? nameMatch[1] : null;
+      
+      if (!name) continue;
+      
+      // Check if this is binary content
+      const isBinary = isBinaryContent(headers, bodyContent);
+      
+      if (isBinary) {
+        // Skip binary content but still record the field name
+        parts.push({ name, value: '[binary data]' });
+      } else {
+        // Extract text content
+        const textValue = bodyContent.trim();
+        parts.push({ name, value: textValue });
+      }
+    }
+  } catch (error) {
+    console.error('Error parsing multipart parts:', error);
+  }
+  
+  return parts;
+}
+
+/**
+ * Check if multipart content is binary based on headers and content
+ */
+function isBinaryContent(headers: string, content: string): boolean {
+  // Check Content-Type header for binary types
+  const contentTypeMatch = headers.match(/content-type\s*:\s*([^;\r\n]+)/i);
+  if (contentTypeMatch) {
+    const contentType = contentTypeMatch[1].trim().toLowerCase();
+    
+    // Common binary content types
+    const binaryTypes = [
+      'image/', 'video/', 'audio/', 'application/octet-stream',
+      'application/pdf', 'application/zip', 'application/gzip',
+      'application/x-', 'font/', 'model/'
+    ];
+    
+    if (binaryTypes.some(type => contentType.startsWith(type))) {
+      return true;
+    }
+  }
+  
+  // Heuristic: check if content contains lots of non-printable characters
+  if (content.length > 100) {
+    const nonPrintableCount = (content.match(/[\x00-\x08\x0E-\x1F\x7F-\xFF]/g) || []).length;
+    const nonPrintableRatio = nonPrintableCount / content.length;
+    
+    // If more than 20% non-printable characters, consider it binary
+    if (nonPrintableRatio > 0.2) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Escape special regex characters
+ */
+function escapeRegex(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Parse multipart body and extract actual text values
+ */
+function parseMultipartBody(body: any, request?: Request): ParsedParameter[] {
   const parameters: ParsedParameter[] = [];
 
   try {
     const bodyText = body.toText();
-    // Basic multipart parsing - extract field names from Content-Disposition headers
-    const fieldMatches = bodyText.match(/name="([^"]+)"/g);
+    const boundary = extractMultipartBoundary(bodyText, request);
     
-    if (fieldMatches) {
-      for (const match of fieldMatches) {
-        const name = match.match(/name="([^"]+)"/)?.[1];
-        if (name) {
-          parameters.push({
-            location: ParameterLocation.MULTIPART,
-            name,
-            value: '[multipart data]',
-          });
+    if (!boundary) {
+      // Fallback to basic parsing if no boundary found
+      const fieldMatches = bodyText.match(/name="([^"]+)"/g);
+      if (fieldMatches) {
+        for (const match of fieldMatches) {
+          const name = match.match(/name="([^"]+)"/)?.[1];
+          if (name) {
+            parameters.push({
+              location: ParameterLocation.MULTIPART,
+              name,
+              value: '[multipart data]',
+            });
+          }
         }
+      }
+      return parameters;
+    }
+
+    const parts = parseMultipartParts(bodyText, boundary);
+    
+    for (const part of parts) {
+      if (part.name && part.value !== null) {
+        parameters.push({
+          location: ParameterLocation.MULTIPART,
+          name: part.name,
+          value: part.value,
+        });
       }
     }
   } catch (error) {

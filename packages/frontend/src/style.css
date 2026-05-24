@@ -549,6 +549,7 @@
 .table-head-cell.col-endpoint { flex: 2; min-width: 220px; }
 .table-head-cell.col-valtype { width: 110px; }
 .table-head-cell.col-flags  { width: 140px; }
+.table-head-cell.col-risk   { width: 90px; }
 
 .inv-table-body {
   flex: 1;
@@ -592,6 +593,7 @@
 .table-cell:nth-child(4) { flex: 2; min-width: 220px; }
 .table-cell:nth-child(5) { width: 110px; }
 .table-cell:nth-child(6) { width: 140px; }
+.table-cell:nth-child(7) { width: 90px; }
 
 
 .row-num {
@@ -640,6 +642,54 @@
 
 .dim-dash {
   color: var(--c-fg-muted);
+}
+
+/* ───── Risk score visualization ───── */
+.risk-cell {
+  padding: 6px 8px;
+}
+
+.risk-score {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.risk-number {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-fg-default);
+  min-width: 24px;
+  text-align: right;
+}
+
+.risk-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--c-bg-inset);
+  border-radius: 2px;
+  overflow: hidden;
+  border: 1px solid var(--c-border-default);
+}
+
+.risk-fill {
+  height: 100%;
+  border-radius: 1px;
+  transition: width 200ms ease-out;
+}
+
+.risk-fill.risk-low {
+  background: linear-gradient(90deg, #6cc06c, #79b079);
+}
+
+.risk-fill.risk-mid {
+  background: linear-gradient(90deg, #f5d76e, #f0a05a);
+}
+
+.risk-fill.risk-high {
+  background: linear-gradient(90deg, #ff6b6b, #f58e97);
 }
 
 /* ───── Method badges ───── */

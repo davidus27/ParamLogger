@@ -221,6 +221,7 @@
             <div class="table-head-cell col-endpoint">Endpoint</div>
             <div class="table-head-cell col-valtype">Value type</div>
             <div class="table-head-cell col-flags">Flags</div>
+            <div class="table-head-cell col-risk">Risk</div>
           </div>
 
           <div class="inv-table-body">
@@ -252,6 +253,18 @@
                     class="flag"
                     :class="`flag-${flag}`"
                   >{{ flag }}</span>
+                </div>
+                <div class="table-cell risk-cell">
+                  <div class="risk-score">
+                    <span class="risk-number">{{ computeRiskScore(p) }}</span>
+                    <div class="risk-bar">
+                      <div 
+                        class="risk-fill" 
+                        :class="getRiskClass(computeRiskScore(p))"
+                        :style="{ width: computeRiskScore(p) + '%' }"
+                      ></div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </RecycleScroller>
@@ -484,6 +497,66 @@ const locationFilters: Array<{ value: 'all' | ParameterLocation; label: string }
   { value: ParameterLocation.PATH, label: 'Path' },
 ];
 
+// ───── Risk scoring ─────
+/**
+ * Computes a security risk score (0-100) for a parameter based on flags, value types, and count spread.
+ * Higher scores indicate higher potential security risk.
+ */
+function computeRiskScore(param: Parameter): number {
+  let score = 0;
+  
+  // Flag weights (sum capped at 60 points)
+  const flagWeights: Record<string, number> = {
+    [Flag.REFLECTED]: 30,
+    [Flag.IDOR]: 25,
+    [Flag.INJECTION]: 20,
+    [Flag.SSTI]: 20,
+    [Flag.PROTO_POLLUTION]: 20,
+    [Flag.FILE]: 15,
+    [Flag.REDIRECT]: 15,
+    [Flag.SENSITIVE]: 10,
+    [Flag.AUTH]: 10,
+    [Flag.DEBUG]: 5,
+  };
+  
+  let flagScore = 0;
+  for (const flag of param.flags) {
+    flagScore += flagWeights[flag] || 0;
+  }
+  score += Math.min(flagScore, 60);
+  
+  // Value type risk weights (sum capped at 20 points)
+  const valueTypeWeights: Partial<Record<ValueType, number>> = {
+    [ValueType.JWT]: 15,
+    [ValueType.SERIALIZED]: 15,
+    [ValueType.IP]: 10,
+    [ValueType.URL]: 10,
+    [ValueType.HASH]: 8,
+    [ValueType.BASE64]: 5,
+  };
+  
+  let valueTypeScore = 0;
+  for (const valueType of param.valueTypes) {
+    valueTypeScore += valueTypeWeights[valueType as ValueType] || 0;
+  }
+  score += Math.min(valueTypeScore, 20);
+  
+  // Count spread bonus (log2(count) * 3, capped at 20 points)
+  const countBonus = Math.log2(Math.max(1, param.count)) * 3;
+  score += Math.min(countBonus, 20);
+  
+  return Math.min(Math.round(score), 100);
+}
+
+/**
+ * Returns CSS class for risk visualization based on score.
+ */
+function getRiskClass(score: number): string {
+  if (score >= 70) return 'risk-high';
+  if (score >= 35) return 'risk-mid';
+  return 'risk-low';
+}
+
 // ───── Derived state ─────
 // First filter by scope to get the scoped parameter set
 const scopedParameters = computed(() => parameters.value.filter(p => isHostInScope(p.domain)));
@@ -492,7 +565,7 @@ const scopedParameterCount = computed(() => scopedParameters.value.length);
 const filteredParameters = computed<Parameter[]>(() => {
   const q = searchQuery.value.trim().toLowerCase();
 
-  return scopedParameters.value.filter((p) => {
+  const filtered = scopedParameters.value.filter((p) => {
     // Existing filters (scope already applied in scopedParameters)
     if (selectedScope.value) {
       if (p.domain !== selectedScope.value.domain) return false;
@@ -510,6 +583,9 @@ const filteredParameters = computed<Parameter[]>(() => {
     }
     return true;
   });
+
+  // Sort by risk score (descending) by default
+  return filtered.sort((a, b) => computeRiskScore(b) - computeRiskScore(a));
 });
 
 // Use the memoized tree from the inventory store and apply scope + text filtering
