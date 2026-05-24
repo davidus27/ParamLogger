@@ -554,9 +554,9 @@ const HELP_PAGES = [
     subtitle: 'Introduction',
     image: new URL('../assets/help/preview.png', import.meta.url).href,
     body: [
-      'Param Logger passively inventories every parameter your target application accepts — query strings, JSON keys, form fields, headers, cookies, and path segments — all extracted automatically from your Caido HTTP history.',
-      'Parameters are deduplicated, classified by value type, and flagged for security-relevant patterns like auth tokens, redirect URLs, IDORs, SSTI, injection points, and more.',
-      'Use this guide to learn about each part of the interface.',
+      'Param Logger watches your Caido HTTP history in the background and builds a deduplicated inventory of every parameter the target accepts.',
+      'Each parameter is classified by value type, flagged for security-relevant patterns, and scored by risk so the most interesting candidates surface first.',
+      'Use this guide to learn how each part of the interface works.',
     ],
   },
   {
@@ -564,9 +564,9 @@ const HELP_PAGES = [
     subtitle: 'Domain & endpoint tree',
     image: new URL('../assets/help/targets.png', import.meta.url).href,
     body: [
-      'The left panel organises discovered parameters into a tree grouped by domain and endpoint.',
-      'Click a domain to filter the table to that host. Expand it to reveal individual endpoints with their HTTP method and path.',
-      'The badge on each row shows how many unique parameters belong to that node. Use the search box at the top of the tree to quickly locate a specific host or path.',
+      'The left tree groups parameters by domain and endpoint, so you can scope the table to a single host or route.',
+      'Click a domain to filter; expand it to drill into individual endpoints. The badge shows the unique parameter count for that node.',
+      'Use the search box at the top to jump to a specific host or path.',
     ],
   },
   {
@@ -574,9 +574,9 @@ const HELP_PAGES = [
     subtitle: 'The main inventory table',
     image: new URL('../assets/help/params.png', import.meta.url).href,
     body: [
-      'The central table lists every unique parameter discovered. Columns include the parameter name, location (query, JSON, form, header, cookie, path), endpoint, detected value type, security flags, and a computed risk score.',
-      'Rows are sorted by risk score by default — the most interesting parameters surface first. Click any row to open the detail drawer on the right.',
-      'The table uses virtual scrolling, so even inventories with tens of thousands of parameters remain responsive.',
+      'The table lists every unique parameter Param Logger has captured, with its location, endpoint, detected value type, flags, and risk score.',
+      'Flags are assigned by name pattern, value content, and location. For example, names like `redirect`, `next`, or `url` get the redirect flag; values that parse as a JWT get the jwt value type; numeric or UUID values on auth-related names get idor.',
+      'The risk score (0 to 100) combines flag severity, value type sensitivity, and observation count. Rows sort by score, so use it to prioritise which parameters to investigate first.',
     ],
   },
   {
@@ -584,9 +584,9 @@ const HELP_PAGES = [
     subtitle: 'Parameter deep-dive drawer',
     image: new URL('../assets/help/detail.png', import.meta.url).href,
     body: [
-      'Clicking a row opens the detail drawer which shows full metadata: location, endpoint, domain, value type, observation count, timestamps, and flags.',
-      'Below the metadata you\'ll find "Things to check" — context-aware attack surface hints generated from the parameter\'s flags and value types. These suggest concrete tests like IDOR swaps, SSTI probes, or open-redirect payloads.',
-      'From the drawer footer you can jump to Caido Search (pre-filtered to matching requests), send the request to Replay, or create a Finding linked to the parameter.',
+      'Clicking a row opens the drawer with full metadata: location, endpoint, value type, observation count, and timestamps.',
+      '"Things to check" is a context-aware list of hints based on the parameter\'s flags, value type, and location, suggesting concrete tests you can run against it.',
+      'From the footer, jump to Caido Search filtered to matching requests, send the latest request to Replay, or create a Finding linked to the parameter.',
     ],
   },
   {
@@ -594,9 +594,8 @@ const HELP_PAGES = [
     subtitle: 'Narrowing down results',
     image: new URL('../assets/help/filters.png', import.meta.url).href,
     body: [
-      'The filter bar below the header lets you narrow the table by location (Query, JSON, Form, Header, Cookie, Path), by security flags (sensitive, auth, redirect, idor, ssti, injection, debug, proto…), or by value type (JWT, URL, email, UUID, base64, hash, integer, boolean, timestamp, IP, serialized).',
-      'The global search box in the header matches against parameter names, endpoints, domains, value types, and flags simultaneously. Press / to focus it from anywhere.',
-      'Filters, tree selection, and search all compose — combine them to slice the inventory precisely. For example: select a domain, enable the "auth" flag filter, and type "token" to find auth-related token parameters on that host.',
+      'The filter bar narrows the table by location, security flag, or value type. Filters and tree selection compose, so combine them to slice the inventory precisely.',
+      'The global header search matches names, endpoints, domains, value types, and flags at once. Press / to focus it from anywhere.',
     ],
   },
 ] as const;
