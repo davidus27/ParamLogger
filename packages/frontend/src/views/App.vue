@@ -2,6 +2,7 @@
   <div id="param-logger-root" class="inv-app">
     <!-- ───── Header ───── -->
     <header class="inv-header">
+      <button class="inv-btn inv-btn-ghost inv-sidebar-toggle" @click="sidebarOpen = !sidebarOpen">☰</button>
       <span class="inv-logo">◆ Param Logger</span>
       <span class="inv-sep"></span>
       <div class="inv-search">
@@ -30,8 +31,11 @@
       </div>
     </header>
 
+    <!-- ───── Sidebar backdrop ───── -->
+    <div v-if="sidebarOpen" class="inv-sidebar-backdrop" @click="sidebarOpen = false"></div>
+
     <!-- ───── Tree (left) ───── -->
-    <aside class="inv-tree-panel">
+    <aside class="inv-tree-panel" :class="{ 'sidebar-open': sidebarOpen }">
       <div class="inv-tree-toolbar">
         <input
           v-model="treeFilter"
@@ -544,6 +548,7 @@ const selectedScope = shallowRef<null | { domain: string; method?: string; path?
 const selectedParam = shallowRef<Parameter | null>(null);
 const openDomains = reactive<Set<string>>(new Set());
 const searchInput = ref<HTMLInputElement | null>(null);
+const sidebarOpen = ref(false);
 
 // ───── Help modal ─────
 const showHelp = ref(false);
@@ -873,6 +878,7 @@ function matchesValueTypeFilter(paramTypes: ValueType[], active: Set<ValueType>)
 
 function selectScope(scope: typeof selectedScope.value): void {
   selectedScope.value = scope;
+  sidebarOpen.value = false; // Close sidebar when a tree item is selected
 }
 
 function isDomainSelected(domain: string): boolean {
