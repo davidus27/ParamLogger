@@ -360,7 +360,10 @@
           </div>
           <div class="d-row">
             <span class="k">Seen</span>
-            <span class="v">{{ selectedParam.count }}× (first {{ formatDate(selectedParam.firstSeen) }})</span>
+            <span class="v">
+              {{ selectedParam.count }} {{ selectedParam.count === 1 ? 'time' : 'times' }}
+            </span>
+     
           </div>
           <div class="d-row">
             <span class="k">Last seen</span>
