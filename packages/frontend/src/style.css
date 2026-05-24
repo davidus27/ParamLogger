@@ -1211,6 +1211,215 @@
   scrollbar-width: thin;
 }
 
+/* ───── Help button ───── */
+.inv-btn-help {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-weight: 700;
+  font-size: 14px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-fg-subtle);
+  background: var(--c-bg-elevated);
+  border: 1px solid var(--c-border-default);
+  flex-shrink: 0;
+}
+
+.inv-btn-help:hover {
+  color: var(--c-fg-default);
+  border-color: var(--c-fg-primary);
+  background: var(--c-bg-elevated);
+}
+
+/* ───── Help modal overlay ───── */
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: help-fade-in 180ms ease-out;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes help-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.help-modal {
+  position: relative;
+  width: 620px;
+  max-width: 92vw;
+  max-height: 88vh;
+  background: var(--c-bg-subtle, #30343c);
+  border: 1px solid var(--c-border-default, #3f444f);
+  border-radius: 14px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255,255,255,0.04) inset;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: help-slide-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  color: var(--c-fg-default, #ebe9e7);
+}
+
+@keyframes help-slide-up {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+.help-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 2;
+  appearance: none;
+  background: var(--c-bg-elevated, #3a3f49);
+  border: 1px solid var(--c-border-default, #3f444f);
+  color: var(--c-fg-subtle, #c7c7c7);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 100ms, background 100ms, border-color 100ms;
+}
+
+.help-close:hover {
+  color: var(--c-fg-default, #ebe9e7);
+  background: var(--c-border-default, #3f444f);
+  border-color: var(--c-border-strong, #616161);
+}
+
+/* ───── Help content ───── */
+.help-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.help-hero {
+  flex-shrink: 0;
+}
+
+.help-image-wrap {
+  width: 100%;
+  max-height: 280px;
+  overflow: hidden;
+  background: var(--c-bg-inset, #1c1e23);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.help-image-wrap img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: contain;
+  max-height: 280px;
+}
+
+.help-image-placeholder {
+  width: 100%;
+  height: 200px;
+  background: var(--c-bg-inset, #1c1e23);
+  border-bottom: 1px solid var(--c-border-default, #3f444f);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-fg-muted, #919191);
+  font-size: 13px;
+  letter-spacing: 0.3px;
+}
+
+.help-text {
+  padding: 24px 28px 20px;
+}
+
+.help-subtitle {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: var(--c-fg-primary, #ec7790);
+  margin-bottom: 6px;
+}
+
+.help-text h2 {
+  margin: 0 0 14px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--c-fg-default, #ebe9e7);
+  line-height: 1.25;
+}
+
+.help-text p {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--c-fg-subtle, #c7c7c7);
+}
+
+.help-text p:last-child {
+  margin-bottom: 0;
+}
+
+/* ───── Help footer / nav ───── */
+.help-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 28px;
+  border-top: 1px solid var(--c-border-default, #3f444f);
+  background: var(--c-bg-elevated, #3a3f49);
+}
+
+.help-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.help-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-border-default, #3f444f);
+  cursor: pointer;
+  transition: background 150ms, transform 150ms;
+}
+
+.help-dot:hover {
+  background: var(--c-fg-muted, #919191);
+}
+
+.help-dot.active {
+  background: var(--c-fg-primary, #ec7790);
+  transform: scale(1.25);
+}
+
+.help-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.help-nav .inv-btn {
+  min-width: 80px;
+  justify-content: center;
+}
+
 /* ───── Selection ───── */
 #param-logger-root ::selection {
   background: rgba(217, 74, 106, 0.35);

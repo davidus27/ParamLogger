@@ -17,6 +17,11 @@
       <span class="inv-result-count">{{ resultCountLabel }}</span>
       <div class="inv-header-actions">
         <button
+          class="inv-btn inv-btn-help"
+          title="How to use Param Logger"
+          @click="openHelp"
+        >?</button>
+        <button
           class="inv-btn"
           :disabled="isRescanning"
           title="Clear the inventory and rescan the current project from scratch"
@@ -450,6 +455,57 @@
         </button>
       </div>
     </aside>
+
+    <!-- ───── Help modal ───── -->
+    <Teleport to="body">
+      <div v-if="showHelp" class="help-overlay" @click.self="closeHelp">
+        <div class="help-modal">
+          <button class="help-close" title="Close" @click="closeHelp">✕</button>
+
+          <div class="help-content">
+            <div class="help-hero">
+              <div v-if="HELP_PAGES[helpPage].image" class="help-image-wrap">
+                <img :src="HELP_PAGES[helpPage].image" :alt="HELP_PAGES[helpPage].title" />
+              </div>
+              <div v-else class="help-image-placeholder">
+                <span>Image / GIF placeholder</span>
+              </div>
+            </div>
+
+            <div class="help-text">
+              <span class="help-subtitle">{{ HELP_PAGES[helpPage].subtitle }}</span>
+              <h2>{{ HELP_PAGES[helpPage].title }}</h2>
+              <p v-for="(para, i) in HELP_PAGES[helpPage].body" :key="i">{{ para }}</p>
+            </div>
+          </div>
+
+          <div class="help-footer">
+            <div class="help-dots">
+              <span
+                v-for="(_, i) in HELP_PAGES"
+                :key="i"
+                class="help-dot"
+                :class="{ active: i === helpPage }"
+                @click="helpPage = i"
+              ></span>
+            </div>
+            <div class="help-nav">
+              <button class="inv-btn" :disabled="helpPage === 0" @click="helpPrev">← Back</button>
+              <button
+                v-if="helpPage < HELP_PAGES.length - 1"
+                class="inv-btn inv-btn-primary"
+                @click="helpNext"
+              >Next →</button>
+              <button
+                v-else
+                class="inv-btn inv-btn-primary"
+                @click="closeHelp"
+              >Get started</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -486,6 +542,76 @@ const selectedScope = shallowRef<null | { domain: string; method?: string; path?
 const selectedParam = shallowRef<Parameter | null>(null);
 const openDomains = reactive<Set<string>>(new Set());
 const searchInput = ref<HTMLInputElement | null>(null);
+
+// ───── Help modal ─────
+const showHelp = ref(false);
+const helpPage = ref(0);
+const HELP_PAGES = [
+  {
+    title: 'Welcome to Param Logger',
+    subtitle: 'Introduction',
+    image: new URL('../assets/help/preview.png', import.meta.url).href,
+    body: [
+      'Param Logger passively inventories every parameter your target application accepts — query strings, JSON keys, form fields, headers, cookies, and path segments — all extracted automatically from your Caido HTTP history.',
+      'Parameters are deduplicated, classified by value type, and flagged for security-relevant patterns like auth tokens, redirect URLs, IDORs, SSTI, injection points, and more.',
+      'Use this guide to learn about each part of the interface.',
+    ],
+  },
+  {
+    title: 'Targets',
+    subtitle: 'Domain & endpoint tree',
+    image: new URL('../assets/help/targets.png', import.meta.url).href,
+    body: [
+      'The left panel organises discovered parameters into a tree grouped by domain and endpoint.',
+      'Click a domain to filter the table to that host. Expand it to reveal individual endpoints with their HTTP method and path.',
+      'The badge on each row shows how many unique parameters belong to that node. Use the search box at the top of the tree to quickly locate a specific host or path.',
+    ],
+  },
+  {
+    title: 'Parameters',
+    subtitle: 'The main inventory table',
+    image: new URL('../assets/help/params.png', import.meta.url).href,
+    body: [
+      'The central table lists every unique parameter discovered. Columns include the parameter name, location (query, JSON, form, header, cookie, path), endpoint, detected value type, security flags, and a computed risk score.',
+      'Rows are sorted by risk score by default — the most interesting parameters surface first. Click any row to open the detail drawer on the right.',
+      'The table uses virtual scrolling, so even inventories with tens of thousands of parameters remain responsive.',
+    ],
+  },
+  {
+    title: 'Details',
+    subtitle: 'Parameter deep-dive drawer',
+    image: new URL('../assets/help/detail.png', import.meta.url).href,
+    body: [
+      'Clicking a row opens the detail drawer which shows full metadata: location, endpoint, domain, value type, observation count, timestamps, and flags.',
+      'Below the metadata you\'ll find "Things to check" — context-aware attack surface hints generated from the parameter\'s flags and value types. These suggest concrete tests like IDOR swaps, SSTI probes, or open-redirect payloads.',
+      'From the drawer footer you can jump to Caido Search (pre-filtered to matching requests), send the request to Replay, or create a Finding linked to the parameter.',
+    ],
+  },
+  {
+    title: 'Filtering & Search',
+    subtitle: 'Narrowing down results',
+    image: new URL('../assets/help/filters.png', import.meta.url).href,
+    body: [
+      'The filter bar below the header lets you narrow the table by location (Query, JSON, Form, Header, Cookie, Path), by security flags (sensitive, auth, redirect, idor, ssti, injection, debug, proto…), or by value type (JWT, URL, email, UUID, base64, hash, integer, boolean, timestamp, IP, serialized).',
+      'The global search box in the header matches against parameter names, endpoints, domains, value types, and flags simultaneously. Press / to focus it from anywhere.',
+      'Filters, tree selection, and search all compose — combine them to slice the inventory precisely. For example: select a domain, enable the "auth" flag filter, and type "token" to find auth-related token parameters on that host.',
+    ],
+  },
+] as const;
+
+function openHelp(): void {
+  helpPage.value = 0;
+  showHelp.value = true;
+}
+function closeHelp(): void {
+  showHelp.value = false;
+}
+function helpNext(): void {
+  if (helpPage.value < HELP_PAGES.length - 1) helpPage.value++;
+}
+function helpPrev(): void {
+  if (helpPage.value > 0) helpPage.value--;
+}
 
 const locationFilters: Array<{ value: 'all' | ParameterLocation; label: string }> = [
   { value: 'all', label: 'All' },
@@ -1267,7 +1393,16 @@ function formatDate(d: Date | string): string {
 
 function onKeyDown(e: KeyboardEvent): void {
   if (e.key === 'Escape') {
+    if (showHelp.value) {
+      closeHelp();
+      return;
+    }
     closeDrawer();
+    return;
+  }
+  if (e.key === '?' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+    e.preventDefault();
+    openHelp();
     return;
   }
   if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') {
