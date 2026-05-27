@@ -878,7 +878,6 @@ function matchesValueTypeFilter(paramTypes: ValueType[], active: Set<ValueType>)
 
 function selectScope(scope: typeof selectedScope.value): void {
   selectedScope.value = scope;
-  sidebarOpen.value = false; // Close sidebar when a tree item is selected
 }
 
 function isDomainSelected(domain: string): boolean {
