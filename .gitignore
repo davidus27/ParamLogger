@@ -32,6 +32,10 @@ pids
 # Plugin build output
 plugin_package.zip
 
+# Signing keys - just in case
+private.pem
+public.pem
+
 # Environment files
 .env
 .env.local

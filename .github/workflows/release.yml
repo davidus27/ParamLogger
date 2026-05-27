@@ -1,0 +1,64 @@
+name: 🚀 Release
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build package
+        run: pnpm build
+
+      - name: Sign package
+        working-directory: dist
+        run: |
+          if [[ -z "${{ secrets.PRIVATE_KEY }}" ]]; then
+            echo "Set an ed25519 key as PRIVATE_KEY in GitHub Action secret to sign."
+            exit 1
+          else
+            echo "${{ secrets.PRIVATE_KEY }}" > private_key.pem
+            openssl pkeyutl -sign -inkey private_key.pem -out plugin_package.zip.sig -rawin -in plugin_package.zip
+            rm private_key.pem
+          fi
+
+      - name: Check version
+        id: meta
+        working-directory: dist
+        run: |
+          VERSION=$(unzip -p plugin_package.zip manifest.json | jq -r .version)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create release
+        uses: caido/action-release@v1
+        with:
+          tag: ${{ steps.meta.outputs.version }}
+          commit: ${{ github.sha }}
+          body: "Release ${{ steps.meta.outputs.version }}"
+          artifacts: "dist/plugin_package.zip,dist/plugin_package.zip.sig"
+          immutableCreate: true
