@@ -75,10 +75,17 @@
 /* ───── App grid ───── */
 .inv-app {
   display: grid;
-  grid-template-columns: 290px 1fr;
+  grid-template-columns: 0fr 1fr;
   grid-template-rows: auto 1fr auto;
-  height: 100vh;
+  height: 100%;
   position: relative;
+  container-type: inline-size;
+  container-name: app;
+  transition: grid-template-columns 240ms cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.inv-app.sidebar-open {
+  grid-template-columns: 290px 1fr;
 }
 
 /* ───── Header ───── */
@@ -272,7 +279,18 @@
   border-color: var(--c-bg-primary);
 }
 
-/* ───── Tree panel ───── */
+/* ───── Sidebar toggle ───── */
+.inv-sidebar-toggle {
+  display: inline-flex;
+  font-size: 16px;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  justify-content: center;
+  touch-action: manipulation;
+}
+
+/* ───── Tree panel (inline; pushes main content) ───── */
 .inv-tree-panel {
   background: var(--c-bg-subtle);
   border-right: 1px solid var(--c-border-default);
@@ -280,6 +298,12 @@
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  visibility: hidden;
+}
+
+.inv-tree-panel.sidebar-open {
+  visibility: visible;
 }
 
 .inv-tree-toolbar {
@@ -501,16 +525,20 @@
 /* ───── Table ───── */
 .inv-table-wrap {
   flex: 1;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: hidden;
+  overflow-x: auto; /* Horizontal scroll when columns don't fit */
 }
 
 .table-container {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  min-height: 0;
+  min-width: 720px; /* Fits all columns; triggers horizontal scroll on narrower viewports */
 }
 
 .table-header {
@@ -518,6 +546,7 @@
   display: flex;
   align-items: center;
   width: 100%;
+  min-width: 720px;
   background: var(--c-bg-subtle);
   border-bottom: 1px solid var(--c-border-default);
   box-sizing: border-box;
@@ -544,25 +573,31 @@
   text-align: center;
 }
 
-.table-head-cell.col-param  { flex: 1; min-width: 140px; }
-.table-head-cell.col-loc    { width: 90px; }
-.table-head-cell.col-endpoint { flex: 2; min-width: 220px; }
-.table-head-cell.col-valtype { width: 110px; }
-.table-head-cell.col-flags  { width: 140px; }
-.table-head-cell.col-risk   { width: 90px; }
+.table-head-cell.col-param  { flex: 1; min-width: 100px; }
+.table-head-cell.col-loc    { width: 80px; }
+.table-head-cell.col-endpoint { flex: 2; min-width: 160px; }
+.table-head-cell.col-valtype { width: 100px; }
+.table-head-cell.col-flags  { width: 120px; }
+.table-head-cell.col-risk   { width: 80px; }
 
 .inv-table-body {
   flex: 1;
   overflow: hidden;
+  width: 100%;
+  min-width: 720px;
 }
 
 .scroller {
   height: 100%;
+  width: 100%;
+  min-width: 720px;
 }
 
 .table-row {
   display: flex;
   align-items: center;
+  width: 100%;
+  min-width: 720px;
   border-bottom: 1px solid var(--c-border-default);
   transition: background 80ms;
   cursor: pointer;
@@ -588,12 +623,12 @@
   color: var(--c-fg-default);
 }
 
-.table-cell:nth-child(2) { flex: 1; min-width: 140px; }
-.table-cell:nth-child(3) { width: 90px; }
-.table-cell:nth-child(4) { flex: 2; min-width: 220px; }
-.table-cell:nth-child(5) { width: 110px; }
-.table-cell:nth-child(6) { width: 140px; }
-.table-cell:nth-child(7) { width: 90px; }
+.table-cell:nth-child(2) { flex: 1; min-width: 100px; }
+.table-cell:nth-child(3) { width: 80px; }
+.table-cell:nth-child(4) { flex: 2; min-width: 160px; }
+.table-cell:nth-child(5) { width: 100px; }
+.table-cell:nth-child(6) { width: 120px; }
+.table-cell:nth-child(7) { width: 80px; }
 
 
 .row-num {
@@ -1431,4 +1466,78 @@
 #param-logger-root ::selection {
   background: rgba(217, 74, 106, 0.35);
   color: var(--c-fg-default);
+}
+
+/* ───── Responsive Layout (Container Queries) ───── */
+
+/* Wide: show sidebar inline when there's plenty of room */
+@container app (min-width: 1200px) {
+  .inv-app,
+  .inv-app.sidebar-open {
+    grid-template-columns: 260px 1fr;
+  }
+
+  .inv-sidebar-toggle {
+    display: none;
+  }
+
+  .inv-tree-panel {
+    visibility: visible;
+  }
+}
+
+/* Condense header at medium widths */
+@container app (max-width: 1100px) {
+  .inv-result-count {
+    display: none;
+  }
+
+  .inv-scope-pill {
+    display: none;
+  }
+}
+
+/* Medium: condense further */
+@container app (max-width: 900px) {
+  .inv-project-pill {
+    display: none;
+  }
+
+  .inv-search {
+    max-width: none;
+    flex: 1;
+  }
+
+  .inv-filter-group {
+    flex-wrap: wrap;
+  }
+
+  .inv-drawer {
+    width: min(400px, 100%);
+  }
+}
+
+/* Small: compact for very narrow panes */
+@container app (max-width: 600px) {
+  .inv-drawer {
+    width: 100%;
+  }
+
+  .inv-pill {
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+
+  .inv-header {
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .inv-logo {
+    font-size: 13px;
+  }
+
+  .inv-sep {
+    display: none;
+  }
 }

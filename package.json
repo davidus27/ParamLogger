@@ -1,12 +1,13 @@
 {
   "name": "caido-param-logger",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Caido Param Logger Plugin",
   "private": true,
   "scripts": {
     "build": "caido-dev build",
     "watch": "caido-dev watch",
-    "dev": "caido-dev watch"
+    "dev": "caido-dev watch",
+    "test": "pnpm -r --filter @param-logger/frontend test"
   },
   "devDependencies": {
     "@caido-community/dev": "^0.1.0"
@@ -14,6 +15,7 @@
   "workspaces": [
     "packages/*"
   ],
+  "packageManager": "pnpm@11.1.3",
   "engines": {
     "node": ">=18.0.0"
   }

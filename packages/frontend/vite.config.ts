@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { resolve } from 'path';
@@ -18,6 +19,17 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
       '@shared': resolve(__dirname, '../shared/src')
+    }
+  },
+  test: {
+    environment: 'happy-dom',
+    globals: true,
+    setupFiles: ['./vitest.setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov', 'html'],
+      include: ['src/**/*.ts', 'src/**/*.vue'],
+      exclude: ['src/index.ts']
     }
   }
 });
