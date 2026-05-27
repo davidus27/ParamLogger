@@ -21,9 +21,15 @@ importers:
       '@caido/sdk-backend':
         specifier: ^0.56.2
         version: 0.56.2
+      '@vitest/coverage-v8':
+        specifier: ^2.1.9
+        version: 2.1.9(vitest@2.1.9(@types/node@25.9.1)(happy-dom@20.9.0))
       typescript:
         specifier: ^5.0.0
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@25.9.1)(happy-dom@20.9.0)
 
   packages/frontend:
     dependencies:
