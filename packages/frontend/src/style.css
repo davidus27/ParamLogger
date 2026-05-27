@@ -525,20 +525,20 @@
 /* ───── Table ───── */
 .inv-table-wrap {
   flex: 1;
-  overflow: hidden;
-  overflow-x: auto; /* Horizontal scroll fallback for narrow screens */
   display: flex;
   flex-direction: column;
-  min-width: 0; /* Allow flex shrinking below content size */
+  min-height: 0;
+  min-width: 0;
+  overflow-y: hidden;
+  overflow-x: auto; /* Horizontal scroll when columns don't fit */
 }
 
 .table-container {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  width: 100%;
-  min-width: 0;
+  min-height: 0;
+  min-width: 720px; /* Fits all columns; triggers horizontal scroll on narrower viewports */
 }
 
 .table-header {
@@ -546,7 +546,7 @@
   display: flex;
   align-items: center;
   width: 100%;
-  min-width: 520px;
+  min-width: 720px;
   background: var(--c-bg-subtle);
   border-bottom: 1px solid var(--c-border-default);
   box-sizing: border-box;
@@ -584,22 +584,24 @@
   flex: 1;
   overflow: hidden;
   width: 100%;
+  min-width: 720px;
 }
 
 .scroller {
   height: 100%;
   width: 100%;
+  min-width: 720px;
 }
 
 .table-row {
   display: flex;
   align-items: center;
   width: 100%;
+  min-width: 720px;
   border-bottom: 1px solid var(--c-border-default);
   transition: background 80ms;
   cursor: pointer;
   min-height: 34px;
-  min-width: 520px;
   box-sizing: border-box;
 }
 
@@ -1517,21 +1519,6 @@
 
 /* Small: compact for very narrow panes */
 @container app (max-width: 600px) {
-  .table-head-cell.col-valtype,
-  .table-head-cell.col-risk {
-    display: none;
-  }
-
-  .table-cell:nth-child(5),
-  .table-cell:nth-child(7) {
-    display: none;
-  }
-
-  .table-header,
-  .table-row {
-    min-width: 400px;
-  }
-
   .inv-drawer {
     width: 100%;
   }

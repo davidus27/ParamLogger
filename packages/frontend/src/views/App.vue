@@ -319,7 +319,7 @@
           title="How to use Param Logger"
           @click="openHelp"
         >?</button>
-        <span>v0.1.0</span>
+        <span>v0.1.1</span>
       </span>
     </footer>
 

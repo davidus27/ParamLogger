@@ -1,6 +1,6 @@
 {
   "name": "caido-param-logger",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Caido Param Logger Plugin",
   "private": true,
   "scripts": {
