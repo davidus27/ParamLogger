@@ -75,12 +75,17 @@
 /* ───── App grid ───── */
 .inv-app {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 0fr 1fr;
   grid-template-rows: auto 1fr auto;
   height: 100%;
   position: relative;
   container-type: inline-size;
   container-name: app;
+  transition: grid-template-columns 240ms cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.inv-app.sidebar-open {
+  grid-template-columns: 290px 1fr;
 }
 
 /* ───── Header ───── */
@@ -274,7 +279,7 @@
   border-color: var(--c-bg-primary);
 }
 
-/* ───── Sidebar toggle and backdrop ───── */
+/* ───── Sidebar toggle ───── */
 .inv-sidebar-toggle {
   display: inline-flex;
   font-size: 16px;
@@ -285,39 +290,20 @@
   touch-action: manipulation;
 }
 
-.inv-sidebar-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.18);
-  z-index: 99;
-  cursor: pointer;
-}
-
-/* ───── Tree panel (always overlay) ───── */
+/* ───── Tree panel (inline; pushes main content) ───── */
 .inv-tree-panel {
-  position: absolute;
-  top: 48px;
-  left: 0;
-  bottom: 26px;
-  width: 290px;
-  z-index: 101;
   background: var(--c-bg-subtle);
   border-right: 1px solid var(--c-border-default);
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  transform: translateX(-100%);
-  transition: transform 280ms cubic-bezier(0.25, 0.8, 0.25, 1);
-  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
-  will-change: transform;
+  min-width: 0;
+  visibility: hidden;
 }
 
 .inv-tree-panel.sidebar-open {
-  transform: translateX(0);
+  visibility: visible;
 }
 
 .inv-tree-toolbar {
@@ -1484,7 +1470,8 @@
 
 /* Wide: show sidebar inline when there's plenty of room */
 @container app (min-width: 1200px) {
-  .inv-app {
+  .inv-app,
+  .inv-app.sidebar-open {
     grid-template-columns: 260px 1fr;
   }
 
@@ -1493,13 +1480,7 @@
   }
 
   .inv-tree-panel {
-    position: static;
-    transform: none;
-    width: auto;
-    z-index: auto;
-    box-shadow: none;
-    will-change: auto;
-    transition: none;
+    visibility: visible;
   }
 }
 

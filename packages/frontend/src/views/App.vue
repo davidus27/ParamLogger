@@ -1,5 +1,5 @@
 <template>
-  <div id="param-logger-root" class="inv-app">
+  <div id="param-logger-root" class="inv-app" :class="{ 'sidebar-open': sidebarOpen }">
     <!-- ───── Header ───── -->
     <header class="inv-header">
       <button class="inv-btn inv-btn-ghost inv-sidebar-toggle" @click="sidebarOpen = !sidebarOpen">☰</button>
@@ -30,9 +30,6 @@
         <span class="inv-scope-pill">{{ currentScope?.name || 'All scopes' }}</span>
       </div>
     </header>
-
-    <!-- ───── Sidebar backdrop ───── -->
-    <div v-if="sidebarOpen" class="inv-sidebar-backdrop" @click="sidebarOpen = false"></div>
 
     <!-- ───── Tree (left) ───── -->
     <aside class="inv-tree-panel" :class="{ 'sidebar-open': sidebarOpen }">
