@@ -7,7 +7,7 @@
     "build": "caido-dev build",
     "watch": "caido-dev watch",
     "dev": "caido-dev watch",
-    "test": "pnpm -r --filter @param-logger/frontend test"
+    "test": "pnpm -r --filter @param-logger/frontend --filter @param-logger/backend test"
   },
   "devDependencies": {
     "@caido-community/dev": "^0.1.0"
