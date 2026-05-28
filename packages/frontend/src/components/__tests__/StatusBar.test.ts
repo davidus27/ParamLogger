@@ -26,7 +26,7 @@ describe('StatusBar', () => {
 
     it('renders the version string', () => {
       const wrapper = mountStatusBar();
-      expect(wrapper.text()).toContain('v0.1.1');
+      expect(wrapper.text()).toContain('v0.1.3');
     });
   });
 
