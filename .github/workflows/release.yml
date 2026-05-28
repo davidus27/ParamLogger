@@ -57,7 +57,7 @@ jobs:
       - name: Create release
         uses: caido/action-release@v1
         with:
-          tag: ${{ steps.meta.outputs.version }}
+          tag: ${{ github.ref_name }}
           commit: ${{ github.sha }}
           body: "Release ${{ steps.meta.outputs.version }}"
           artifacts: "dist/plugin_package.zip,dist/plugin_package.zip.sig"
