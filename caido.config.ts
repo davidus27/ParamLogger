@@ -4,10 +4,11 @@ export default defineConfig({
   id: "param-logger",
   name: "Param Logger",
   description: "Passively logs HTTP parameters from proxied traffic into a searchable parameter map",
-  version: "0.1.3",
+  version: "0.1.4",
   author: {
     name: "David Drobny",
-    email: "david.drobny@example.com",
+    email: "david.drobny123@gmail.com",
+    url: "https://github.com/davidus27",
   },
   plugins: [
     {
