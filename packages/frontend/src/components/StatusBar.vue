@@ -10,7 +10,7 @@
         title="How to use Param Logger"
         @click="$emit('open-help')"
       >?</button>
-      <span>v0.1.3</span>
+      <span>v0.1.4</span>
     </span>
   </footer>
 </template>

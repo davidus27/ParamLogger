@@ -1477,10 +1477,6 @@
     grid-template-columns: 260px 1fr;
   }
 
-  .inv-sidebar-toggle {
-    display: none;
-  }
-
   .inv-tree-panel {
     visibility: visible;
   }
