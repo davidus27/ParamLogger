@@ -16,6 +16,6 @@
     "@caido/sdk-backend": "^0.56.2",
     "@vitest/coverage-v8": "^2.1.9",
     "typescript": "^5.0.0",
-    "vitest": "^2.1.9"
+    "vitest": "^3.2.6"
   }
 }
