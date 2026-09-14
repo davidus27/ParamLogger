@@ -1,6 +1,6 @@
 {
   "name": "@param-logger/backend",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "description": "Backend plugin for Param Logger",
   "type": "module",
   "main": "src/index.ts",
