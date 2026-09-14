@@ -1,5 +1,5 @@
 <template>
-  <div id="param-logger-root" class="inv-app" :class="{ 'sidebar-open': sidebarOpen }">
+  <div id="param-logger-root" ref="appRoot" class="inv-app" :class="{ 'sidebar-open': sidebarOpen }">
     <AppHeader
       v-model:searchQuery="searchQuery"
       v-model:sidebarOpen="sidebarOpen"
@@ -149,11 +149,12 @@ const {
 );
 
 const appHeader = ref<InstanceType<typeof AppHeader> | null>(null);
+const appRoot = ref<HTMLElement | null>(null);
 const searchInput = computed(() => appHeader.value?.searchInput ?? null);
 const sidebarOpen = ref(false);
 
 // ───── Keyboard shortcuts ─────
-useKeyboardShortcuts({ searchInput, showHelp, openHelp, closeHelp, closeDrawer });
+useKeyboardShortcuts({ root: appRoot, searchInput, showHelp, openHelp, closeHelp, closeDrawer });
 
 // ───── Watchers ─────
 // When the Caido project changes, drop any selection / filter state that
