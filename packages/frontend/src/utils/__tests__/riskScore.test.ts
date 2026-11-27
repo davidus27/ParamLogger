@@ -3,6 +3,8 @@ import { Flag, ValueType } from '@param-logger/shared';
 import type { Parameter } from '@param-logger/shared';
 import {
   computeRiskScore,
+  getRiskScore,
+  sortByRisk,
   getRiskClass,
   FLAG_WEIGHTS,
   VALUE_TYPE_WEIGHTS,
@@ -23,6 +25,31 @@ function makeParam(overrides: Partial<Parameter> = {}): Parameter {
     lastSeen: new Date(),
     ...overrides,
   };
+}
+
+/** A parameter whose `count` getter records its reads; computeRiskScore reads it once per call. */
+function countedParam(count: number, overrides: Partial<Parameter> = {}) {
+  const reads = { n: 0 };
+  const param = makeParam(overrides);
+  Object.defineProperty(param, 'count', {
+    get: () => {
+      reads.n++;
+      return count;
+    },
+  });
+  return { param, reads };
+}
+
+/** An inventory with many equal scores: flags, value types and counts cycle at different rates. */
+function mixedInventory(size: number): Parameter[] {
+  const flagSets = [[], [Flag.DEBUG], [Flag.IDOR], [Flag.AUTH, Flag.SENSITIVE], [Flag.REFLECTED, Flag.INJECTION]];
+  const typeSets = [[], [ValueType.JWT], [ValueType.BASE64], [ValueType.URL, ValueType.HASH]];
+  return Array.from({ length: size }, (_, i) => makeParam({
+    id: `p${i}`,
+    flags: flagSets[(i * 7) % flagSets.length],
+    valueTypes: typeSets[(i * 3) % typeSets.length],
+    count: 1 + ((i * 13) % 50),
+  }));
 }
 
 describe('FLAG_WEIGHTS', () => {
@@ -139,6 +166,70 @@ describe('computeRiskScore', () => {
     const p0 = makeParam({ count: 0 });
     const p1 = makeParam({ count: 1 });
     expect(computeRiskScore(p0)).toBe(computeRiskScore(p1));
+  });
+});
+
+describe('getRiskScore', () => {
+  it('returns the same score as computeRiskScore', () => {
+    for (const p of mixedInventory(50)) {
+      expect(getRiskScore(p)).toBe(computeRiskScore(p));
+    }
+  });
+
+  it('computes the score once per object, however often it is asked', () => {
+    const { param, reads } = countedParam(4, { flags: [Flag.IDOR] });
+    expect(getRiskScore(param)).toBe(31);
+    expect(getRiskScore(param)).toBe(31);
+    expect(getRiskScore(param)).toBe(31);
+    expect(reads.n).toBe(1);
+  });
+
+  it('scores a new object for the same parameter afresh', () => {
+    const before = makeParam({ id: 'same', count: 2 });
+    const after = makeParam({ id: 'same', count: 8 });
+    expect(getRiskScore(before)).toBe(3);
+    expect(getRiskScore(after)).toBe(9);
+    expect(getRiskScore(before)).toBe(3);
+  });
+});
+
+describe('sortByRisk', () => {
+  it('puts higher scores first', () => {
+    const low = makeParam({ id: 'low' });
+    const mid = makeParam({ id: 'mid', flags: [Flag.DEBUG] });
+    const high = makeParam({ id: 'high', flags: [Flag.REFLECTED, Flag.IDOR] });
+    expect(sortByRisk([low, high, mid]).map(p => p.id)).toEqual(['high', 'mid', 'low']);
+  });
+
+  it('keeps the input order for equal scores', () => {
+    const params = ['a', 'b', 'c', 'd', 'e'].map((id, i) =>
+      makeParam({ id, flags: i % 2 === 0 ? [Flag.AUTH] : [Flag.SENSITIVE] }));
+    expect(sortByRisk(params).map(p => p.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  it('matches the old comparator, ties included', () => {
+    const params = mixedInventory(300);
+    const scores = new Set(params.map(computeRiskScore));
+    expect(scores.size).toBeLessThan(params.length / 4);
+
+    const expected = params.slice().sort((a, b) => computeRiskScore(b) - computeRiskScore(a));
+    expect(sortByRisk(params).map(p => p.id)).toEqual(expected.map(p => p.id));
+  });
+
+  it('returns a new array and leaves its input as it was', () => {
+    const params = mixedInventory(20);
+    const ids = params.map(p => p.id);
+    const sorted = sortByRisk(params);
+    expect(sorted).not.toBe(params);
+    expect(params.map(p => p.id)).toEqual(ids);
+  });
+
+  it('scores each parameter once across sorts', () => {
+    const counted = [1, 4, 2, 16, 4].map(count => countedParam(count));
+    const params = counted.map(c => c.param);
+    sortByRisk(params);
+    sortByRisk(params.slice().reverse());
+    expect(counted.map(c => c.reads.n)).toEqual([1, 1, 1, 1, 1]);
   });
 });
 

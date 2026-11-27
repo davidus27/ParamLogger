@@ -170,6 +170,30 @@ describe('ParameterTable', () => {
       const hasRiskClass = fill.classes().some(c => c.startsWith('risk-'));
       expect(hasRiskClass).toBe(true);
     });
+
+    it('computes a row\'s score once, across re-renders', async () => {
+      // The template never shows `count`, so its reads all come from computing the score.
+      // Not enumerable, so test-utils' walk over the mount props doesn't read it.
+      let reads = 0;
+      const p = makeParam({ id: 'counted', flags: [Flag.IDOR, Flag.INJECTION] });
+      Object.defineProperty(p, 'count', {
+        enumerable: false,
+        get: () => {
+          reads++;
+          return 4;
+        },
+      });
+
+      const wrapper = mountTable({ parameters: [p] });
+      expect(wrapper.find('.risk-number').text()).toBe('51');
+      const fill = wrapper.find('.risk-fill');
+      expect(fill.classes()).toContain('risk-mid');
+      expect((fill.element as HTMLElement).style.width).toBe('51%');
+
+      await wrapper.setProps({ selectedParam: p });
+      expect(wrapper.find('.table-row').classes()).toContain('selected');
+      expect(reads).toBe(1);
+    });
   });
 
   describe('row selection', () => {

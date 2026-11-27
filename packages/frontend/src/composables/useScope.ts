@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue';
+import { computed, ref, type Ref } from 'vue';
 import type { Caido } from '@caido/sdk-frontend';
 
 // Scope shape as exposed by the Caido SDK.
@@ -26,6 +26,93 @@ function readCurrentScope(): Scope | undefined {
     console.warn('[Param Logger] Failed to read current scope:', error);
     return undefined;
   }
+}
+
+// Normalize a host or pattern for matching: strip scheme/port, lowercase
+function normalizeHost(value: string): string {
+  let normalized = value;
+  
+  // Strip leading scheme (https?://)
+  normalized = normalized.replace(/^https?:\/\//, '');
+  
+  // Drop everything from the first '/' onward
+  normalized = normalized.split('/')[0];
+  
+  // Strip port suffix
+  normalized = normalized.split(':')[0];
+  
+  // Lowercase
+  normalized = normalized.toLowerCase();
+  
+  return normalized;
+}
+
+// Convert a Caido scope pattern to a regex
+function patternToRegex(pattern: string): RegExp {
+  // Normalize the pattern first
+  const normalized = normalizeHost(pattern);
+  
+  // Escape regex metacharacters except * and ?
+  // Use placeholders to avoid double-conversion
+  const withPlaceholders = normalized
+    .replace(/\*/g, '__ASTERISK__')
+    .replace(/\?/g, '__QUESTION__');
+  
+  const escaped = withPlaceholders.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  
+  // Replace placeholders with regex equivalents
+  const regexPattern = escaped
+    .replace(/__ASTERISK__/g, '.*')
+    .replace(/__QUESTION__/g, '.');
+  
+  return new RegExp(`^${regexPattern}$`, 'i');
+}
+
+// Most hosts isHostInScope remembers per scope revision. Past this the cache
+// is emptied and refills, so a long session can't grow it without limit.
+// The eviction is wholesale, not least-recently-used: above this many distinct
+// hosts in one pass, the pass keeps emptying and refilling the cache and pays
+// the regexes again. Make it an LRU before raising the limit.
+export const SCOPE_DECISION_CACHE_LIMIT = 10_000;
+
+// The current scope's patterns as regexes, rebuilt only when the scope is
+// swapped or one of its lists is edited. isHostInScope runs on every inventory
+// batch, so it must not build regexes itself. Keep the regexes free of the `g`
+// flag: `test()` on a shared `g` regex is stateful (`lastIndex`).
+// `decisions` caches isHostInScope by raw host; it lives on this object so a
+// recompute drops it together with the regexes it was decided with.
+const compiledScope = computed(() => {
+  const scope = currentScope.value;
+  if (!scope) return null;
+  return {
+    scope,
+    deny: scope.denylist.map((pattern) => patternToRegex(pattern)),
+    allow: scope.allowlist.map((pattern) => patternToRegex(pattern)),
+    decisions: new Map<string, boolean>(),
+  };
+});
+
+function matchesScope(allow: RegExp[], deny: RegExp[], normalizedHost: string): boolean {
+  // Check denylist first
+  for (const denyRegex of deny) {
+    if (denyRegex.test(normalizedHost)) {
+      return false;
+    }
+  }
+
+  // If allowlist is empty, allow everything (that wasn't denied)
+  if (allow.length === 0) {
+    return true;
+  }
+
+  // Check allowlist
+  for (const allowRegex of allow) {
+    if (allowRegex.test(normalizedHost)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function useScope() {
@@ -107,103 +194,47 @@ export function useScope() {
     refresh('init');
   }
 
-  // Normalize a host or pattern for matching: strip scheme/port, lowercase
-  function normalizeHost(value: string): string {
-    let normalized = value;
-    
-    // Strip leading scheme (https?://)
-    normalized = normalized.replace(/^https?:\/\//, '');
-    
-    // Drop everything from the first '/' onward
-    normalized = normalized.split('/')[0];
-    
-    // Strip port suffix
-    normalized = normalized.split(':')[0];
-    
-    // Lowercase
-    normalized = normalized.toLowerCase();
-    
-    return normalized;
-  }
-
-  // Convert a Caido scope pattern to a regex
-  function patternToRegex(pattern: string): RegExp {
-    // Normalize the pattern first
-    const normalized = normalizeHost(pattern);
-    
-    // Escape regex metacharacters except * and ?
-    // Use placeholders to avoid double-conversion
-    const withPlaceholders = normalized
-      .replace(/\*/g, '__ASTERISK__')
-      .replace(/\?/g, '__QUESTION__');
-    
-    const escaped = withPlaceholders.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    
-    // Replace placeholders with regex equivalents
-    const regexPattern = escaped
-      .replace(/__ASTERISK__/g, '.*')
-      .replace(/__QUESTION__/g, '.');
-    
-    return new RegExp(`^${regexPattern}$`, 'i');
-  }
-
   function isHostInScope(host: string): boolean {
-    const scope = currentScope.value;
+    const compiled = compiledScope.value;
     // No scope selected → everything is in scope (mirrors Caido's behaviour).
-    if (!scope) return true;
+    if (!compiled) return true;
 
-    const { allowlist, denylist } = scope;
-    const normalizedHost = normalizeHost(host);
+    const { allow, deny, decisions } = compiled;
+    const cached = decisions.get(host);
+    if (cached !== undefined) return cached;
 
-    // Check denylist first
-    for (const denyPattern of denylist) {
-      if (patternToRegex(denyPattern).test(normalizedHost)) {
-        return false;
-      }
-    }
-
-    // If allowlist is empty, allow everything (that wasn't denied)
-    if (allowlist.length === 0) {
-      return true;
-    }
-
-    // Check allowlist
-    for (const allowPattern of allowlist) {
-      if (patternToRegex(allowPattern).test(normalizedHost)) {
-        return true;
-      }
-    }
-
-    return false;
+    const inScope = matchesScope(allow, deny, normalizeHost(host));
+    if (decisions.size >= SCOPE_DECISION_CACHE_LIMIT) decisions.clear();
+    decisions.set(host, inScope);
+    return inScope;
   }
 
   // Developer-facing helper for debugging scope matching
   function explain(host: string): { inScope: boolean; reason: string; scope?: Scope } {
-    const scope = currentScope.value;
+    const compiled = compiledScope.value;
     const normalizedHost = normalizeHost(host);
     
-    if (!scope) {
+    if (!compiled) {
       return {
         inScope: true,
         reason: 'No scope selected - all hosts allowed',
       };
     }
 
-    const { allowlist, denylist } = scope;
+    const { scope, allow, deny } = compiled;
 
     // Check denylist first
-    for (const denyPattern of denylist) {
-      if (patternToRegex(denyPattern).test(normalizedHost)) {
-        return {
-          inScope: false,
-          reason: `Blocked by denylist pattern: ${denyPattern}`,
-          scope,
-        };
-      }
+    const denyIndex = deny.findIndex((regex) => regex.test(normalizedHost));
+    if (denyIndex !== -1) {
+      return {
+        inScope: false,
+        reason: `Blocked by denylist pattern: ${scope.denylist[denyIndex]}`,
+        scope,
+      };
     }
 
     // If allowlist is empty, allow everything (that wasn't denied)
-    if (allowlist.length === 0) {
+    if (allow.length === 0) {
       return {
         inScope: true,
         reason: 'Allowlist is empty - all hosts allowed (except denied)',
@@ -212,14 +243,13 @@ export function useScope() {
     }
 
     // Check allowlist
-    for (const allowPattern of allowlist) {
-      if (patternToRegex(allowPattern).test(normalizedHost)) {
-        return {
-          inScope: true,
-          reason: `Matched allowlist pattern: ${allowPattern}`,
-          scope,
-        };
-      }
+    const allowIndex = allow.findIndex((regex) => regex.test(normalizedHost));
+    if (allowIndex !== -1) {
+      return {
+        inScope: true,
+        reason: `Matched allowlist pattern: ${scope.allowlist[allowIndex]}`,
+        scope,
+      };
     }
 
     return {

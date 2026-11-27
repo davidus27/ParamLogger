@@ -89,6 +89,7 @@ import { useFilters } from '../composables/useFilters';
 import { useSelection } from '../composables/useSelection';
 import { useHelp } from '../composables/useHelp';
 import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts';
+import { usePageVisibility } from '../composables/usePageVisibility';
 import { buildHttpQLForParameter } from '../utils/httpql';
 import AppHeader from '../components/AppHeader.vue';
 import TreePanel from '../components/TreePanel.vue';
@@ -101,9 +102,10 @@ import HelpModal from '../components/HelpModal.vue';
 
 const caido = inject<Caido<InventoryBackendAPI, InventoryBackendEvents>>('caido');
 const { parameters, isLoading, setLoading, tree } = useInventory();
-const { init: initBackend, connectionStatus, refreshInventory, resetAndRescan } = useBackend();
+const { init: initBackend, connectionStatus, resetAndRescan } = useBackend();
 const { currentScope, init: initScope, isHostInScope, cleanup: cleanupScope, getCurrentScope, explain, refresh: refreshScope } = useScope();
 const { currentProject, init: initProject, cleanup: cleanupProject } = useProject();
+const { start: startPageVisibility, stop: stopPageVisibility } = usePageVisibility();
 
 const isConnected = computed(() => connectionStatus.isConnected);
 
@@ -176,9 +178,10 @@ watch(
   },
 );
 
-// When the Caido scope changes, narrow the view to the new scope and pull
-// fresh data from the backend so results always reflect the active scope.
-watch(currentScope, async (newScope, oldScope) => {
+// When the Caido scope changes, narrow the view to the new scope. Scope is
+// applied here, in useFilters: the backend keeps every parameter whatever the
+// scope, so there is nothing to refetch (getInventory is the whole inventory).
+watch(currentScope, (newScope, oldScope) => {
   // Clear stale UI state that may reference out-of-scope items.
   selectScope(null);
   closeDrawer();
@@ -187,29 +190,9 @@ watch(currentScope, async (newScope, oldScope) => {
   // set rather than a possibly-empty intersection with the previous filters.
   resetFilters();
 
-  console.info('[Param Logger] scope changed, refreshing results', {
+  console.info('[Param Logger] scope changed', {
     from: oldScope?.name ?? null,
     to: newScope?.name ?? null,
-  });
-
-  // Always refetch from backend so the visible list reflects the latest data
-  // under the new scope (also covers cases where parameters arrived while a
-  // different scope was active).
-  if (caido) {
-    try {
-      setLoading(true);
-      await refreshInventory();
-    } catch (error) {
-      console.warn('[Param Logger] Failed to refresh inventory after scope change:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  console.info('[Param Logger] scope filter result', {
-    scope: newScope,
-    scoped: scopedParameterCount.value,
-    total: parameters.value.length,
   });
 });
 
@@ -329,6 +312,7 @@ onMounted(async () => {
   try {
     setLoading(true);
     if (caido) {
+      if (appRoot.value) startPageVisibility(appRoot.value, caido);
       initBackend(caido);
       initScope(caido);
       void initProject(caido);
@@ -343,6 +327,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  stopPageVisibility();
   cleanupScope();
   cleanupProject();
 });

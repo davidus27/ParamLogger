@@ -1,5 +1,6 @@
 import { createApp } from 'vue';
 import App from './views/App.vue';
+import { PAGE_PATH } from './composables/usePageVisibility';
 import type { Caido } from '@caido/sdk-frontend';
 import type { InventoryBackendAPI, InventoryBackendEvents } from '@param-logger/shared';
 
@@ -15,11 +16,11 @@ export function init(caido: Caido<InventoryBackendAPI, InventoryBackendEvents>):
   app.provide('caido', caido);
   app.mount(container);
 
-  caido.navigation.addPage("/param-logger", {
+  caido.navigation.addPage(PAGE_PATH, {
     body: container
   });
 
-  caido.sidebar.registerItem("Param Logger", "/param-logger", {
+  caido.sidebar.registerItem("Param Logger", PAGE_PATH, {
     icon: "fas fa-list"
   });
 }

@@ -2,7 +2,7 @@ import { ref, computed, reactive } from 'vue';
 import type { ComputedRef, ShallowRef } from 'vue';
 import type { Parameter } from '@param-logger/shared';
 import { ParameterLocation, ValueType } from '@param-logger/shared';
-import { computeRiskScore } from '../utils/riskScore';
+import { sortByRisk } from '../utils/riskScore';
 import { matchesValueTypeFilter } from '../utils/valueTypes';
 import type { ScopeSelection } from './useSelection';
 
@@ -30,7 +30,21 @@ export function useFilters(
   const activeFlags = reactive<Set<string>>(new Set());
   const activeValueTypes = reactive<Set<ValueType>>(new Set());
 
-  const scopedParameters = computed(() => parameters.value.filter(p => isHostInScope(p.domain)));
+  // Scope depends only on the host, so it is decided once per domain (tree
+  // node), not per parameter. `tree` must be built from `parameters`: a
+  // parameter whose domain has no tree node counts as out of scope.
+  const inScopeDomains = computed(() => {
+    const domains = new Set<string>();
+    for (const domain of tree.value) {
+      if (isHostInScope(domain.name)) domains.add(domain.name);
+    }
+    return domains;
+  });
+
+  const scopedParameters = computed(() => {
+    const domains = inScopeDomains.value;
+    return parameters.value.filter(p => domains.has(p.domain));
+  });
   const scopedParameterCount = computed(() => scopedParameters.value.length);
 
   const filteredParameters = computed<Parameter[]>(() => {
@@ -52,11 +66,12 @@ export function useFilters(
       return true;
     });
 
-    return filtered.sort((a, b) => computeRiskScore(b) - computeRiskScore(a));
+    return sortByRisk(filtered);
   });
 
   const filteredTree = computed<TreeNode[]>(() => {
-    const scopedDomains = tree.value.filter(domain => isHostInScope(domain.name));
+    const domains = inScopeDomains.value;
+    const scopedDomains = tree.value.filter(domain => domains.has(domain.name));
 
     const filter = treeFilter.value.trim().toLowerCase();
     if (!filter) {
@@ -95,7 +110,7 @@ export function useFilters(
     const n = filteredParameters.value.length;
     const base = `${n} parameter${n === 1 ? '' : 's'}`;
     if (!selectedScope.value) {
-      const domains = new Set(scopedParameters.value.map((p) => p.domain)).size;
+      const domains = inScopeDomains.value.size;
       return `${base} across ${domains} domain${domains === 1 ? '' : 's'}`;
     }
     if (selectedScope.value.path) {

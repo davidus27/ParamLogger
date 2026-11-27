@@ -51,6 +51,33 @@ export function computeRiskScore(param: Parameter): number {
   return Math.min(Math.round(score), 100);
 }
 
+const riskScores = new WeakMap<Parameter, number>();
+
+/**
+ * computeRiskScore, cached per parameter object. A parameter must not be
+ * mutated once it has been scored: updates arrive as new objects. Nothing
+ * invalidates an entry, so a parameter edited in place keeps its old score
+ * for as long as the object lives.
+ */
+export function getRiskScore(param: Parameter): number {
+  let score = riskScores.get(param);
+  if (score === undefined) {
+    score = computeRiskScore(param);
+    riskScores.set(param, score);
+  }
+  return score;
+}
+
+/**
+ * Returns the parameters sorted by risk score, highest first. Parameters with
+ * equal scores keep their input order.
+ */
+export function sortByRisk(params: readonly Parameter[]): Parameter[] {
+  const keyed = params.map(param => ({ param, score: getRiskScore(param) }));
+  keyed.sort((a, b) => b.score - a.score);
+  return keyed.map(k => k.param);
+}
+
 /**
  * Returns CSS class for risk visualization based on score.
  */

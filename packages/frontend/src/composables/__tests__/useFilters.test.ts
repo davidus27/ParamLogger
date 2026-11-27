@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { computed, shallowRef } from 'vue';
 import type { Parameter } from '@param-logger/shared';
 import { ParameterLocation, ValueType, Flag } from '@param-logger/shared';
@@ -32,13 +32,32 @@ function makeParam(overrides: Partial<Parameter> = {}): Parameter {
 type TreeEndpoint = { method: string; path: string; params: Parameter[] };
 type TreeNode = { name: string; paramCount: number; endpoints: TreeEndpoint[] };
 
+/** Group parameters by domain and endpoint, as useInventory's tree does. */
+function treeOf(params: Parameter[]): TreeNode[] {
+  const domains = new Map<string, Map<string, TreeEndpoint>>();
+  for (const p of params) {
+    let endpoints = domains.get(p.domain);
+    if (!endpoints) domains.set(p.domain, (endpoints = new Map()));
+    const key = `${p.method} ${p.normalizedPath}`;
+    let endpoint = endpoints.get(key);
+    if (!endpoint) endpoints.set(key, (endpoint = { method: p.method, path: p.normalizedPath, params: [] }));
+    endpoint.params.push(p);
+  }
+  return [...domains].map(([name, endpoints]) => ({
+    name,
+    paramCount: [...endpoints.values()].reduce((s, e) => s + e.params.length, 0),
+    endpoints: [...endpoints.values()],
+  }));
+}
+
 /**
- * Build a useFilters instance wired to the supplied parameters and tree,
- * with a configurable scope selection and an isHostInScope predicate.
+ * Build a useFilters instance wired to the supplied parameters and tree
+ * (by default the tree of those parameters, as in the app), with a
+ * configurable scope selection and an isHostInScope predicate.
  */
 function makeFilters(
   params: Parameter[],
-  tree: TreeNode[] = [],
+  tree: TreeNode[] = treeOf(params),
   scopeValue: ScopeSelection = null,
   inScope: (host: string) => boolean = () => true,
 ) {
@@ -59,7 +78,7 @@ describe('useFilters — scope filtering', () => {
 
   it('returns all in-scope params when selectedScope is null', () => {
     const params = [makeParam({ domain: 'a.com' }), makeParam({ domain: 'b.com' })];
-    const { filters } = makeFilters(params, [], null, h => h === 'a.com');
+    const { filters } = makeFilters(params, undefined, null, h => h === 'a.com');
     // only a.com is in scope
     const ids = filters.filteredParameters.value.map(p => p.domain);
     expect(ids).toEqual(['a.com']);
@@ -70,7 +89,7 @@ describe('useFilters — scope filtering', () => {
       makeParam({ domain: 'a.com', normalizedPath: '/x', method: 'GET' }),
       makeParam({ domain: 'b.com', normalizedPath: '/y', method: 'GET' }),
     ];
-    const { filters, selectedScope } = makeFilters(params, [], null);
+    const { filters, selectedScope } = makeFilters(params);
     selectedScope.value = { domain: 'a.com' };
     const domains = filters.filteredParameters.value.map(p => p.domain);
     expect(domains.every(d => d === 'a.com')).toBe(true);
@@ -92,8 +111,87 @@ describe('useFilters — scope filtering', () => {
       makeParam({ domain: 'allowed.com' }),
       makeParam({ domain: 'blocked.com' }),
     ];
-    const { filters } = makeFilters(params, [], null, h => h === 'allowed.com');
+    const { filters } = makeFilters(params, undefined, null, h => h === 'allowed.com');
     expect(filters.filteredParameters.value.every(p => p.domain === 'allowed.com')).toBe(true);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Scope decided per domain
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('useFilters — scope decided per domain', () => {
+  beforeEach(() => { idCounter = 0; });
+
+  function readAll(filters: ReturnType<typeof useFilters>): void {
+    void filters.filteredParameters.value;
+    void filters.filteredTree.value;
+    void filters.resultCountLabel.value;
+    void filters.scopedParameterCount.value;
+  }
+
+  it('calls isHostInScope once per domain per pass', () => {
+    const domains = ['a.com', 'b.com', 'c.com'];
+    const params = shallowRef(domains.flatMap(domain =>
+      Array.from({ length: 10 }, (_, i) => makeParam({ domain, name: `p${i}` }))));
+    const inScope = vi.fn((host: string) => host !== 'b.com');
+    const filters = useFilters(
+      computed(() => params.value),
+      computed(() => treeOf(params.value)),
+      inScope,
+      shallowRef<ScopeSelection>(null),
+    );
+
+    readAll(filters);
+    expect(inScope).toHaveBeenCalledTimes(3);
+    expect(filters.scopedParameterCount.value).toBe(20);
+
+    // A new inventory batch is one more pass.
+    params.value = [...params.value, makeParam({ domain: 'a.com', name: 'new' })];
+    readAll(filters);
+    expect(inScope).toHaveBeenCalledTimes(6);
+    expect(filters.scopedParameterCount.value).toBe(21);
+
+    // Narrowing filters reuse the domain decisions.
+    filters.searchQuery.value = 'p1';
+    filters.treeFilter.value = 'a';
+    readAll(filters);
+    expect(inScope).toHaveBeenCalledTimes(6);
+    expect(new Set(inScope.mock.calls.map(([host]) => host))).toEqual(new Set(domains));
+  });
+
+  it('matches a per-parameter scope check under a mixed allowlist and denylist', async () => {
+    vi.resetModules();
+    const { useScope } = await import('../useScope');
+    const scope = useScope();
+    scope.currentScope.value = {
+      id: 's1',
+      name: 'Mixed',
+      allowlist: ['*.example.com', 'api.other.org', 'exact.test:8443'],
+      denylist: ['admin.example.com', '*.internal.example.com'],
+    } as any;
+
+    const domains = [
+      'www.example.com', 'admin.example.com', 'db.internal.example.com', 'example.com',
+      'api.other.org', 'cdn.other.org', 'exact.test', 'unrelated.net',
+    ];
+    const params = [0, 1].flatMap(i => domains.map(domain => makeParam({ domain, name: `p${i}` })));
+    // explain() checks every host against the patterns without the decision cache.
+    const perParameter = () => params.filter(p => scope.explain(p.domain).inScope);
+
+    const { filters } = makeFilters(params, undefined, null, scope.isHostInScope);
+    expect(filters.scopedParameters.value).toEqual(perParameter());
+    expect(filters.filteredTree.value.map(d => d.name)).toEqual(['www.example.com', 'api.other.org', 'exact.test']);
+    expect(filters.resultCountLabel.value).toBe('6 parameters across 3 domains');
+
+    scope.currentScope.value!.denylist.push('api.other.org');
+    expect(filters.scopedParameters.value).toEqual(perParameter());
+    expect(filters.filteredTree.value.map(d => d.name)).toEqual(['www.example.com', 'exact.test']);
+    expect(filters.resultCountLabel.value).toBe('4 parameters across 2 domains');
+
+    scope.currentScope.value = undefined;
+    expect(filters.scopedParameters.value).toEqual(params);
+    expect(filters.resultCountLabel.value).toBe('16 parameters across 8 domains');
   });
 });
 
@@ -280,6 +378,53 @@ describe('useFilters — sort by risk score', () => {
     expect(filters.filteredParameters.value[0].id).toBe('high');
     expect(filters.filteredParameters.value[1].id).toBe('low');
   });
+
+  it('keeps inventory order among equal scores', () => {
+    const params = [
+      makeParam({ id: 'a' }),
+      makeParam({ id: 'b', flags: [Flag.IDOR] }),
+      makeParam({ id: 'c' }),
+      makeParam({ id: 'd', flags: [Flag.IDOR] }),
+    ];
+    const { filters } = makeFilters(params);
+    expect(filters.filteredParameters.value.map(p => p.id)).toEqual(['b', 'd', 'a', 'c']);
+  });
+
+  it('scores each parameter object once across filter passes and batches', () => {
+    // computeRiskScore reads `count` once per call; nothing else in useFilters reads it.
+    const reads = new Map<string, number>();
+    function counted(id: string, count: number): Parameter {
+      const p = makeParam({ id, name: id });
+      Object.defineProperty(p, 'count', {
+        get: () => {
+          reads.set(id, (reads.get(id) ?? 0) + 1);
+          return count;
+        },
+      });
+      return p;
+    }
+
+    const params = shallowRef([counted('a', 1), counted('b', 8), counted('c', 2)]);
+    const filters = useFilters(
+      computed(() => params.value),
+      computed(() => treeOf(params.value)),
+      () => true,
+      shallowRef<ScopeSelection>(null),
+    );
+    const ids = () => filters.filteredParameters.value.map(p => p.id);
+
+    expect(ids()).toEqual(['b', 'c', 'a']);
+    filters.searchQuery.value = 'example.com';
+    expect(ids()).toEqual(['b', 'c', 'a']);
+    filters.activeLoc.value = ParameterLocation.QUERY;
+    expect(ids()).toEqual(['b', 'c', 'a']);
+    expect(Object.fromEntries(reads)).toEqual({ a: 1, b: 1, c: 1 });
+
+    // A batch replaces the record for `a` with a new object; only that one is scored.
+    params.value = [counted('a', 64), params.value[1], params.value[2]];
+    expect(ids()).toEqual(['a', 'b', 'c']);
+    expect(Object.fromEntries(reads)).toEqual({ a: 2, b: 1, c: 1 });
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -363,7 +508,7 @@ describe('useFilters — scopedParameterCount', () => {
       makeParam({ domain: 'allowed.com' }),
       makeParam({ domain: 'blocked.com' }),
     ];
-    const { filters } = makeFilters(params, [], null, h => h === 'allowed.com');
+    const { filters } = makeFilters(params, undefined, null, h => h === 'allowed.com');
     expect(filters.scopedParameterCount.value).toBe(1);
   });
 });
