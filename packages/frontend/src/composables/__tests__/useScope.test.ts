@@ -141,6 +141,170 @@ describe('useScope — isHostInScope', () => {
   });
 });
 
+describe('useScope — compiled scope', () => {
+  async function freshScope() {
+    vi.resetModules();
+    const mod = await import('../useScope');
+    return mod.useScope();
+  }
+
+  // Counts `new RegExp(...)` calls made while `fn` runs. Regex literals don't count.
+  function regexesBuiltBy(fn: () => void): number {
+    let built = 0;
+    const NativeRegExp = globalThis.RegExp;
+    globalThis.RegExp = new Proxy(NativeRegExp, {
+      construct(target, args) {
+        built++;
+        return Reflect.construct(target, args);
+      },
+    });
+    try {
+      fn();
+    } finally {
+      globalThis.RegExp = NativeRegExp;
+    }
+    return built;
+  }
+
+  it('builds no regexes when no scope is selected', async () => {
+    const scope = await freshScope();
+    expect(regexesBuiltBy(() => scope.isHostInScope('example.com'))).toBe(0);
+  });
+
+  it('compiles each pattern once across many calls', async () => {
+    const scope = await freshScope();
+    scope.currentScope.value = {
+      id: 's1',
+      name: 'Test',
+      allowlist: ['*.example.com', 'example.org'],
+      denylist: ['evil.example.com'],
+    } as any;
+    const results: boolean[] = [];
+    let reason = '';
+    const built = regexesBuiltBy(() => {
+      for (let i = 0; i < 100; i++) {
+        results.push(
+          scope.isHostInScope('api.example.com'),
+          scope.isHostInScope('evil.example.com'),
+          scope.isHostInScope('other.net'),
+        );
+      }
+      reason = scope.explain('example.org').reason;
+    });
+    expect(built).toBe(3);
+    expect(results.slice(0, 3)).toEqual([true, false, false]);
+    expect(results.slice(-3)).toEqual([true, false, false]);
+    expect(reason).toBe('Matched allowlist pattern: example.org');
+  });
+
+  it('recompiles after the scope is swapped', async () => {
+    const scope = await freshScope();
+    scope.currentScope.value = {
+      id: 's1', name: 'A', allowlist: ['example.com'], denylist: [],
+    } as any;
+    expect(scope.isHostInScope('other.com')).toBe(false);
+
+    scope.currentScope.value = {
+      id: 's2', name: 'B', allowlist: ['other.com'], denylist: ['bad.other.com'],
+    } as any;
+    let results: boolean[] = [];
+    expect(regexesBuiltBy(() => {
+      results = [scope.isHostInScope('other.com'), scope.isHostInScope('example.com')];
+    })).toBe(2);
+    expect(results).toEqual([true, false]);
+    expect(regexesBuiltBy(() => scope.isHostInScope('other.com'))).toBe(0);
+
+    scope.currentScope.value = undefined;
+    expect(regexesBuiltBy(() => {
+      results = [scope.isHostInScope('example.com')];
+    })).toBe(0);
+    expect(results).toEqual([true]);
+  });
+
+  it('recompiles after an in-place denylist.push', async () => {
+    const scope = await freshScope();
+    scope.currentScope.value = {
+      id: 's1', name: 'T', allowlist: ['*.example.com'], denylist: [],
+    } as any;
+    expect(scope.isHostInScope('evil.example.com')).toBe(true);
+
+    scope.currentScope.value!.denylist.push('evil.example.com');
+    let inScope = true;
+    expect(regexesBuiltBy(() => {
+      inScope = scope.isHostInScope('evil.example.com');
+    })).toBe(2);
+    expect(inScope).toBe(false);
+    expect(scope.explain('evil.example.com').reason).toBe('Blocked by denylist pattern: evil.example.com');
+  });
+
+  it('recompiles after an allowlist entry is replaced in place', async () => {
+    const scope = await freshScope();
+    scope.currentScope.value = {
+      id: 's1', name: 'T', allowlist: ['example.com'], denylist: [],
+    } as any;
+    expect(scope.isHostInScope('other.com')).toBe(false);
+
+    scope.currentScope.value!.allowlist[0] = 'other.com';
+    expect(scope.isHostInScope('other.com')).toBe(true);
+    expect(scope.isHostInScope('example.com')).toBe(false);
+  });
+});
+
+describe('useScope — decision cache', () => {
+  async function freshModule() {
+    vi.resetModules();
+    return import('../useScope');
+  }
+
+  // Counts pattern checks (RegExp#test) made while `fn` runs.
+  function patternChecksBy(fn: () => void): number {
+    const spy = vi.spyOn(RegExp.prototype, 'test');
+    try {
+      fn();
+      return spy.mock.calls.length;
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it('checks each host against the patterns once per scope revision', async () => {
+    const scope = (await freshModule()).useScope();
+    scope.currentScope.value = {
+      id: 's1', name: 'T', allowlist: ['*.example.com'], denylist: ['evil.example.com'],
+    } as any;
+    const hosts = ['api.example.com', 'evil.example.com', 'other.net'];
+
+    let first: boolean[] = [];
+    expect(patternChecksBy(() => { first = hosts.map(h => scope.isHostInScope(h)); })).toBe(5);
+    expect(first).toEqual([true, false, false]);
+
+    let again: boolean[] = [];
+    expect(patternChecksBy(() => {
+      for (let i = 0; i < 100; i++) again = hosts.map(h => scope.isHostInScope(h));
+    })).toBe(0);
+    expect(again).toEqual(first);
+
+    scope.currentScope.value = {
+      id: 's2', name: 'U', allowlist: ['other.net'], denylist: [],
+    } as any;
+    expect(hosts.map(h => scope.isHostInScope(h))).toEqual([false, false, true]);
+  });
+
+  it('empties the cache once it holds SCOPE_DECISION_CACHE_LIMIT hosts', async () => {
+    const mod = await freshModule();
+    const scope = mod.useScope();
+    scope.currentScope.value = {
+      id: 's1', name: 'T', allowlist: ['*.example.com'], denylist: [],
+    } as any;
+    for (let i = 0; i < mod.SCOPE_DECISION_CACHE_LIMIT; i++) scope.isHostInScope(`h${i}.example.com`);
+
+    expect(patternChecksBy(() => scope.isHostInScope('h0.example.com'))).toBe(0);
+    expect(patternChecksBy(() => scope.isHostInScope('new.example.com'))).toBe(1);
+    expect(patternChecksBy(() => scope.isHostInScope('new.example.com'))).toBe(0);
+    expect(patternChecksBy(() => scope.isHostInScope('h0.example.com'))).toBe(1);
+  });
+});
+
 describe('useScope — explain', () => {
   async function freshScope() {
     vi.resetModules();

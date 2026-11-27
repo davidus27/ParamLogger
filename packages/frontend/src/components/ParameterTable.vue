@@ -42,12 +42,12 @@
           </div>
           <div class="table-cell risk-cell">
             <div class="risk-score">
-              <span class="risk-number">{{ computeRiskScore(p) }}</span>
+              <span class="risk-number">{{ getRiskScore(p) }}</span>
               <div class="risk-bar">
                 <div
                   class="risk-fill"
-                  :class="getRiskClass(computeRiskScore(p))"
-                  :style="{ width: computeRiskScore(p) + '%' }"
+                  :class="getRiskClass(getRiskScore(p))"
+                  :style="{ width: getRiskScore(p) + '%' }"
                 ></div>
               </div>
             </div>
@@ -61,7 +61,7 @@
 <script setup lang="ts">
 import { RecycleScroller } from 'vue-virtual-scroller';
 import type { Parameter } from '@param-logger/shared';
-import { computeRiskScore, getRiskClass } from '../utils/riskScore';
+import { getRiskScore, getRiskClass } from '../utils/riskScore';
 
 defineProps<{
   parameters: Parameter[];
