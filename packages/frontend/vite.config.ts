@@ -3,11 +3,13 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { resolve } from 'path';
 
+const root = import.meta.dirname;
+
 export default defineConfig({
   plugins: [vue()],
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
+      entry: resolve(root, 'src/index.ts'),
       name: 'ParamLogger',
       fileName: 'index'
     },
@@ -17,8 +19,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
-      '@shared': resolve(__dirname, '../shared/src')
+      '@': resolve(root, 'src'),
+      '@shared': resolve(root, '../shared/src')
     }
   },
   test: {
