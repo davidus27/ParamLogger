@@ -39,7 +39,14 @@ function createCaido(parameters: Parameter[], scope: Scope | undefined) {
         endpoints: 0,
       })),
       getCurrentProject: vi.fn(async () => ({ projectId: 'p1', projectName: 'Project' })),
+      getRequestIdsForParam: vi.fn(async (_id: string) => ['req-1', 'req-2']),
       onEvent: vi.fn(() => ({ stop: () => {} })),
+    },
+    replay: {
+      createSession: vi.fn(async () => {}),
+    },
+    search: {
+      setQuery: vi.fn(),
     },
     scopes: {
       getCurrentScope: () => current,
@@ -117,5 +124,35 @@ describe('App — scope changes', () => {
 
     expect((search.element as HTMLInputElement).value).toBe('');
     expect(wrapper!.findAll('.table-row')).toHaveLength(1);
+  });
+});
+
+describe('App — Send to Replay', () => {
+  async function clickSendToReplay() {
+    await wrapper!.findAll('.table-row')[0].trigger('click');
+    const button = wrapper!.findAll('button').find(b => b.text().includes('Send to Replay'));
+    expect(button).toBeDefined();
+    await button!.trigger('click');
+    await flushPromises();
+  }
+
+  it('creates a session from the first request and opens Replay by route id (#24)', async () => {
+    const { caido } = await mountApp(inventory, undefined);
+    await clickSendToReplay();
+
+    expect(caido.backend.getRequestIdsForParam).toHaveBeenCalledWith('a1');
+    expect(caido.replay.createSession).toHaveBeenCalledWith({ type: 'ID', id: 'req-1' });
+    expect(caido.navigation.goTo).toHaveBeenCalledWith({ id: 'Replay' });
+    expect(caido.navigation.goTo).not.toHaveBeenCalledWith('Replay');
+  });
+
+  it('falls back to Search when the parameter has no request ids', async () => {
+    const { caido } = await mountApp(inventory, undefined);
+    caido.backend.getRequestIdsForParam.mockResolvedValueOnce([]);
+    await clickSendToReplay();
+
+    expect(caido.replay.createSession).not.toHaveBeenCalled();
+    expect(caido.search.setQuery).toHaveBeenCalled();
+    expect(caido.navigation.goTo).toHaveBeenCalledWith({ id: 'Search' });
   });
 });
