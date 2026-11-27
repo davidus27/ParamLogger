@@ -244,7 +244,9 @@ async function sendToReplay(p: Parameter): Promise<void> {
     }
     const requestId = ids[0];
     await caido.replay.createSession({ type: 'ID', id: requestId });
-    caido.navigation.goTo('Replay');
+    // A string is a path: 'Replay' lands on #/Replay, where Caido shows an
+    // empty request pane once #/replay has been visited.
+    caido.navigation.goTo({ id: 'Replay' });
   } catch (error) {
     console.error('[Param Logger] sendToReplay failed:', error);
     // Graceful fallback
