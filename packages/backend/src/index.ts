@@ -21,7 +21,7 @@ import { parseSetCookie } from "./pure/cookies.js";
 import { classifyValue } from "./pure/classify.js";
 import { computeStaticFlags, recomputeNewFlag } from "./pure/flags.js";
 
-const BUILD_TAG = "param-logger backend build 2026-05-20b";
+const BUILD_TAG = "param-logger backend 0.1.8 (2026-11-27)";
 
 // In-memory store. Cleared whenever the active Caido project changes so that
 // parameters from a previous project never leak into a new project's view.

@@ -1,6 +1,6 @@
 {
   "name": "@param-logger/backend",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Backend plugin for Param Logger",
   "type": "module",
   "main": "src/index.ts",
@@ -13,9 +13,9 @@
     "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
-    "@caido/sdk-backend": "^0.56.2",
-    "@vitest/coverage-v8": "^2.1.9",
-    "typescript": "^5.0.0",
-    "vitest": "^3.2.6"
+    "@caido/sdk-backend": "^0.59.1",
+    "@vitest/coverage-v8": "^5.1.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.2"
   }
 }
