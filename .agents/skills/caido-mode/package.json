@@ -10,6 +10,6 @@
   "dependencies": {
     "@caido/sdk-client": "^0.4.0",
     "graphql-tag": "^2.12.6",
-    "tsx": "^4.19.0"
+    "tsx": "^4.23.15"
   }
 }
